@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role == 'admin';
+    }
+    
+    function isEmployee() {
+      return isAuthenticated() && getUserData().role == 'employee';
+    }
+    
+    function belongsToSameCompany(companyId) {
+      return isAuthenticated() && getUserData().companyId == companyId;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Users can read and update their own data
+      allow read, update: if isOwner(userId);
+      
+      // Admins can read users in their company
+      allow read: if isAdmin() && belongsToSameCompany(resource.data.companyId);
+      
+      // Admins can create employees in their company
+      allow create: if isAdmin() 
+        && request.resource.data.companyId == getUserData().companyId
+        && request.resource.data.role == 'employee';
+      
+      // Only the user themselves or an admin in their company can update
+      allow update: if isOwner(userId) || 
+        (isAdmin() && belongsToSameCompany(resource.data.companyId));
+    }
+
+    // Companies collection
+    match /companies/{companyId} {
+      // Company owners and employees can read their company
+      allow read: if belongsToSameCompany(companyId);
+      
+      // Only company owners can create/update company data
+      allow create, update: if isAuthenticated() && 
+        request.auth.uid == request.resource.data.ownerUid;
+    }
+
+    // Job Sites collection
+    match /jobSites/{siteId} {
+      // Employees and admins can read job sites in their company
+      allow read: if belongsToSameCompany(resource.data.companyId);
+      
+      // Only admins can create/update/delete job sites for their company
+      allow create: if isAdmin() && 
+        request.resource.data.companyId == getUserData().companyId;
+      
+      allow update, delete: if isAdmin() && 
+        belongsToSameCompany(resource.data.companyId);
+    }
+
+    // Time Entries collection
+    match /timeEntries/{entryId} {
+      // Employees can only create their own time entries
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.companyId == getUserData().companyId;
+      
+      // Users can read time entries in their company
+      allow read: if belongsToSameCompany(resource.data.companyId);
+      
+      // Only admins can update/delete time entries
+      allow update, delete: if isAdmin() && 
+        belongsToSameCompany(resource.data.companyId);
+    }
+
+    // Completed Shifts collection (for reporting)
+    match /completedShifts/{shiftId} {
+      // Users can read shifts in their company
+      allow read: if belongsToSameCompany(resource.data.companyId);
+      
+      // Only admins and the system (via Cloud Functions) can write
+      allow create, update: if isAdmin() && 
+        belongsToSameCompany(resource.data.companyId);
+      
+      // Employees can read their own shifts
+      allow read: if isEmployee() && 
+        resource.data.userId == request.auth.uid;
+    }
+
+    // System logs collection (for debugging)
+    match /systemLogs/{logId} {
+      // Only admins can read system logs for their company
+      allow read: if isAdmin() && 
+        belongsToSameCompany(resource.data.companyId);
+      
+      // System can create logs (Cloud Functions)
+      allow create: if true; // This will be restricted in Cloud Functions
+    }
+  }
+} 

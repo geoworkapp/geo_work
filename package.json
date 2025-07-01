@@ -1,0 +1,31 @@
+{
+  "name": "geo-work-monorepo",
+  "version": "1.0.0",
+  "description": "Geofence-based employee time tracking application",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:admin\" \"npm run dev:functions\"",
+    "dev:admin": "npm run dev --workspace=packages/web-admin",
+    "dev:functions": "npm run dev --workspace=packages/functions",
+    "build": "npm run build --workspaces",
+    "build:admin": "npm run build --workspace=packages/web-admin",
+    "build:functions": "npm run build --workspace=packages/functions",
+    "lint": "npm run lint --workspaces",
+    "type-check": "npm run type-check --workspaces",
+    "flutter:devices": "cd packages/mobile && flutter devices",
+    "flutter:run": "cd packages/mobile && flutter run",
+    "flutter:build:android": "cd packages/mobile && flutter build apk",
+    "flutter:build:ios": "cd packages/mobile && flutter build ios"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+} 
