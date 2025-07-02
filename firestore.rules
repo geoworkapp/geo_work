@@ -1,110 +1,372 @@
-rules_version = '2';
+rules_version='2'
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper functions
+    // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
+    function isCompanyMember(userId, companyId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.companyId == companyId;
+    }
+
+    function isCompanyAdmin(userId, companyId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.companyId == companyId &&
+             get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
+    }
+
+    function isSuperAdmin(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.role == 'superadmin';
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasCompanyId() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId != null;
+    }
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-    
+
     function isAdmin() {
-      return isAuthenticated() && getUserData().role == 'admin';
-    }
-    
-    function isEmployee() {
-      return isAuthenticated() && getUserData().role == 'employee';
-    }
-    
-    function belongsToSameCompany(companyId) {
-      return isAuthenticated() && getUserData().companyId == companyId;
-    }
-    
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return getUserData().role == 'admin';
     }
 
-    // Users collection
+    function isManager() {
+      return getUserData().role == 'manager';
+    }
+
+    function isSameCompany(companyId) {
+      return hasCompanyId() && getUserData().companyId == companyId;
+    }
+
+    function canManageEmployees() {
+      return isAdmin() || isManager();
+    }
+
+    // CORE COLLECTIONS - ESSENTIAL SECURITY RULES
+    
+    // Users Collection - Core user profiles and authentication data
     match /users/{userId} {
-      // Users can read and update their own data
-      allow read, update: if isOwner(userId);
-      
-      // Admins can read users in their company
-      allow read: if isAdmin() && belongsToSameCompany(resource.data.companyId);
-      
-      // Admins can create employees in their company
-      allow create: if isAdmin() 
-        && request.resource.data.companyId == getUserData().companyId
-        && request.resource.data.role == 'employee';
-      
-      // Only the user themselves or an admin in their company can update
-      allow update: if isOwner(userId) || 
-        (isAdmin() && belongsToSameCompany(resource.data.companyId));
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId || // Own profile
+        (hasCompanyId() && isSameCompany(resource.data.companyId)) // Same company
+      );
+      allow write: if isSignedIn() && canManageEmployees() && 
+        isSameCompany(request.resource.data.companyId);
+      allow delete: if isSignedIn() && canManageEmployees() && 
+        isSameCompany(resource.data.companyId);
     }
 
-    // Companies collection
+    // Companies Collection - Company data and settings
     match /companies/{companyId} {
-      // Company owners and employees can read their company
-      allow read: if belongsToSameCompany(companyId);
-      
-      // Only company owners can create/update company data
-      allow create, update: if isAuthenticated() && 
-        request.auth.uid == request.resource.data.ownerUid;
+      allow read: if isCompanyMember(request.auth.uid, companyId) || isSuperAdmin(request.auth.uid);
+      allow create: if request.auth.uid == request.resource.data.ownerUid || isSuperAdmin(request.auth.uid);
+      allow update: if isCompanyAdmin(request.auth.uid, companyId) || isSuperAdmin(request.auth.uid);
+      allow delete: if isSuperAdmin(request.auth.uid); // Only super admin can delete companies
     }
 
-    // Job Sites collection
+    // Job Sites Collection - Location data and geofence configuration
     match /jobSites/{siteId} {
-      // Employees and admins can read job sites in their company
-      allow read: if belongsToSameCompany(resource.data.companyId);
-      
-      // Only admins can create/update/delete job sites for their company
-      allow create: if isAdmin() && 
-        request.resource.data.companyId == getUserData().companyId;
-      
-      allow update, delete: if isAdmin() && 
-        belongsToSameCompany(resource.data.companyId);
+      allow read: if isSignedIn() && hasCompanyId() && 
+        isSameCompany(resource.data.companyId);
+      allow write: if isSignedIn() && canManageEmployees() && 
+        isSameCompany(request.resource.data.companyId);
+      allow delete: if isSignedIn() && canManageEmployees() && 
+        isSameCompany(resource.data.companyId);
     }
 
-    // Time Entries collection
+    // Time Entries Collection (Legacy) - Employee time tracking data
     match /timeEntries/{entryId} {
-      // Employees can only create their own time entries
-      allow create: if isAuthenticated() && 
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        (canManageEmployees() && isSameCompany(resource.data.companyId))
+      );
+      allow write: if isSignedIn() && 
         request.resource.data.userId == request.auth.uid &&
-        request.resource.data.companyId == getUserData().companyId;
-      
-      // Users can read time entries in their company
-      allow read: if belongsToSameCompany(resource.data.companyId);
-      
-      // Only admins can update/delete time entries
-      allow update, delete: if isAdmin() && 
-        belongsToSameCompany(resource.data.companyId);
+        isSameCompany(request.resource.data.companyId);
+      allow delete: if isSignedIn() && canManageEmployees() && 
+        isSameCompany(resource.data.companyId);
     }
 
-    // Completed Shifts collection (for reporting)
+    // Helper function to get user's company (used in other rules)
+    function getUserCompany(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.companyId;
+    }
+
+    // TEMPORARY FALLBACK - Remove after all rules are implemented
+    match /{document=**} {
+      // This rule allows anyone with your database reference to view, edit,
+      // and delete all data in your database. It is useful for getting
+      // started, but it is configured to expire after 30 days because it
+      // leaves your app open to attackers. At that time, all client
+      // requests to your database will be denied.
+      //
+      // Make sure to write security rules for your app before that time, or
+      // else all client requests to your database will be denied until you
+      // update your rules.
+      allow read, write: if request.time < timestamp.date(2025, 7, 31);
+    }
+
+    // CompletedShifts Collection
     match /completedShifts/{shiftId} {
-      // Users can read shifts in their company
-      allow read: if belongsToSameCompany(resource.data.companyId);
-      
-      // Only admins and the system (via Cloud Functions) can write
-      allow create, update: if isAdmin() && 
-        belongsToSameCompany(resource.data.companyId);
-      
-      // Employees can read their own shifts
-      allow read: if isEmployee() && 
-        resource.data.userId == request.auth.uid;
+      allow read, write: if isCompanyMember(request.auth.uid, resource.data.companyId) &&
+                           (isCompanyAdmin(request.auth.uid, resource.data.companyId) ||
+                            request.auth.uid == resource.data.employeeId);
     }
 
-    // System logs collection (for debugging)
-    match /systemLogs/{logId} {
-      // Only admins can read system logs for their company
-      allow read: if isAdmin() && 
-        belongsToSameCompany(resource.data.companyId);
-      
-      // System can create logs (Cloud Functions)
-      allow create: if true; // This will be restricted in Cloud Functions
+    // Enhanced Business Logic Collections
+
+    // Company Settings Collection
+    match /companySettings/{settingId} {
+      allow read: if isCompanyMember(request.auth.uid, resource.data.companyId);
+      allow write: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // Employee Assignments Collection
+    match /employeeAssignments/{assignmentId} {
+      allow read: if isCompanyMember(request.auth.uid, resource.data.companyId);
+      allow write: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // Business Rules Collection
+    match /businessRules/{ruleId} {
+      allow read: if isCompanyMember(request.auth.uid, resource.data.companyId);
+      allow write: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // Notification Preferences Collection
+    match /notificationPreferences/{prefId} {
+      allow read, write: if request.auth.uid == resource.data.userId;
+      allow read: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // Audit Logs Collection (read-only for users, write-only by system)
+    match /auditLogs/{logId} {
+      allow read: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+      allow write: if false; // Only system can write audit logs
+    }
+
+    // Subscriptions Collection (admin only)
+    match /subscriptions/{subscriptionId} {
+      allow read, write: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // Integrations Collection (admin only, sensitive data)
+    match /integrations/{integrationId} {
+      allow read, write: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // Alerts Collection
+    match /alerts/{alertId} {
+      allow read: if isCompanyMember(request.auth.uid, resource.data.companyId) &&
+                   (isCompanyAdmin(request.auth.uid, resource.data.companyId) ||
+                    request.auth.uid == resource.data.employeeId);
+      allow write: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // Extensibility & Future-Proof Architecture Collections
+
+    // System Configuration Collection
+    match /systemConfigurations/{configId} {
+      allow read: if request.auth != null && 
+                   (resource.data.isPublic == true ||
+                    (resource.data.companyId != null && isCompanyMember(request.auth.uid, resource.data.companyId)) ||
+                    (resource.data.companyId == null && isSuperAdmin(request.auth.uid)));
+      allow write: if (resource.data.companyId != null && isCompanyAdmin(request.auth.uid, resource.data.companyId) && resource.data.isEditable == true) ||
+                    (resource.data.companyId == null && isSuperAdmin(request.auth.uid));
+    }
+
+    // Custom Fields Collection
+    match /customFields/{fieldId} {
+      allow read: if isCompanyMember(request.auth.uid, resource.data.companyId);
+      allow write: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // Custom Field Values Collection
+    match /customFieldValues/{valueId} {
+      allow read: if isCompanyMember(request.auth.uid, resource.data.companyId);
+      allow write: if isCompanyMember(request.auth.uid, resource.data.companyId);
+    }
+
+    // Permissions Collection (system-managed)
+    match /permissions/{permissionId} {
+      allow read: if request.auth != null;
+      allow write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Roles Collection
+    match /roles/{roleId} {
+      allow read: if request.auth != null && 
+                   (resource.data.companyId == null || isCompanyMember(request.auth.uid, resource.data.companyId));
+      allow write: if (resource.data.companyId != null && isCompanyAdmin(request.auth.uid, resource.data.companyId)) ||
+                    (resource.data.companyId == null && isSuperAdmin(request.auth.uid));
+    }
+
+    // User Roles Collection
+    match /userRoles/{userRoleId} {
+      allow read: if isCompanyMember(request.auth.uid, resource.data.companyId);
+      allow write: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // System Events Collection (system writes, admins read)
+    match /systemEvents/{eventId} {
+      allow read: if (resource.data.companyId != null && isCompanyAdmin(request.auth.uid, resource.data.companyId)) ||
+                   (resource.data.companyId == null && isSuperAdmin(request.auth.uid));
+      allow write: if false; // Only system/Cloud Functions can write events
+    }
+
+    // Event Handlers Collection
+    match /eventHandlers/{handlerId} {
+      allow read: if (resource.data.companyId != null && isCompanyAdmin(request.auth.uid, resource.data.companyId)) ||
+                   (resource.data.companyId == null && isSuperAdmin(request.auth.uid));
+      allow write: if (resource.data.companyId != null && isCompanyAdmin(request.auth.uid, resource.data.companyId)) ||
+                    (resource.data.companyId == null && isSuperAdmin(request.auth.uid));
+    }
+
+    // Background Jobs Collection
+    match /backgroundJobs/{jobId} {
+      allow read: if (resource.data.companyId != null && isCompanyAdmin(request.auth.uid, resource.data.companyId)) ||
+                   (resource.data.companyId == null && isSuperAdmin(request.auth.uid));
+      allow write: if false; // Only system/Cloud Functions manage background jobs
+    }
+
+    // API Versions Collection (read-only for clients)
+    match /apiVersions/{versionId} {
+      allow read: if request.auth != null;
+      allow write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Cache Entries Collection (system-managed)
+    match /cacheEntries/{cacheId} {
+      allow read, write: if false; // Only system manages cache
+    }
+
+    // Super Admin / Platform Owner Collections
+
+    // Platform Analytics Collection (super admin only)
+    match /platformAnalytics/{analyticsId} {
+      allow read, write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Customer Metrics Collection (super admin only)
+    match /customerMetrics/{metricsId} {
+      allow read, write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // System Health Collection (super admin only)
+    match /systemHealth/{healthId} {
+      allow read, write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Support Tickets Collection
+    match /supportTickets/{ticketId} {
+      allow read: if isSuperAdmin(request.auth.uid) || 
+                   (isCompanyMember(request.auth.uid, resource.data.companyId) &&
+                    request.auth.uid == resource.data.userId);
+      allow write: if isSuperAdmin(request.auth.uid) ||
+                    (isCompanyMember(request.auth.uid, resource.data.companyId) &&
+                     request.auth.uid == resource.data.userId);
+    }
+
+    // Business Metrics Collection (super admin only)
+    match /businessMetrics/{metricsId} {
+      allow read, write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Compliance Audits Collection (super admin only)
+    match /complianceAudits/{auditId} {
+      allow read, write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Financial Reports Collection (super admin only)
+    match /financialReports/{reportId} {
+      allow read, write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Platform Configuration Collection (super admin only)
+    match /platformConfigurations/{configId} {
+      allow read: if isSuperAdmin(request.auth.uid);
+      allow write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Customer Success Activities Collection
+    match /customerSuccessActivities/{activityId} {
+      allow read: if isSuperAdmin(request.auth.uid) ||
+                   isCompanyAdmin(request.auth.uid, resource.data.companyId);
+      allow write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Enhanced Internationalization Collections
+
+    // User Locales - Users can read/update their own, admins can manage all
+    match /userLocales/{localeId} {
+      allow read, write: if resource.data.userId == request.auth.uid;
+      allow read, write: if isCompanyAdmin(request.auth.uid, getUserCompany(resource.data.userId)) || isSuperAdmin(request.auth.uid);
+    }
+
+    // Translations - Super admins manage, others read
+    match /translations/{translationId} {
+      allow read: if true; // Public read for UI translation
+      allow write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Localized Content - Super admins manage, others read
+    match /localizedContent/{contentId} {
+      allow read: if true; // Public read for content display
+      allow write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Regional Settings - Super admins manage, others read
+    match /regionalSettings/{regionId} {
+      allow read: if true; // Public read for regional configuration
+      allow write: if isSuperAdmin(request.auth.uid);
+    }
+
+    // Consolidated Configuration - Scoped access based on scope level
+    match /configurations/{configId} {
+      allow read: if (resource.data.scope == 'global' && resource.data.isPublic == true) ||
+                     (resource.data.scope == 'company' && isCompanyMember(request.auth.uid, resource.data.scopeId)) ||
+                     (resource.data.scope == 'user' && resource.data.scopeId == request.auth.uid) ||
+                     isSuperAdmin(request.auth.uid);
+      allow write: if (resource.data.scope == 'global' && isSuperAdmin(request.auth.uid)) ||
+                      (resource.data.scope == 'company' && isCompanyAdmin(request.auth.uid, resource.data.scopeId)) ||
+                      (resource.data.scope == 'user' && resource.data.scopeId == request.auth.uid);
+    }
+
+    // Enhanced Time Tracking Collections
+
+    // Time Events (new simplified model)
+    match /timeEvents/{eventId} {
+      allow read, write: if isCompanyMember(request.auth.uid, resource.data.companyId) &&
+                          (isCompanyAdmin(request.auth.uid, resource.data.companyId) ||
+                           request.auth.uid == resource.data.userId);
+    }
+
+    // Work Sessions
+    match /workSessions/{sessionId} {
+      allow read, write: if isCompanyMember(request.auth.uid, resource.data.companyId) &&
+                          (isCompanyAdmin(request.auth.uid, resource.data.companyId) ||
+                           request.auth.uid == resource.data.userId);
+    }
+
+    // User Assignments (updated from EmployeeAssignment)
+    match /userAssignments/{assignmentId} {
+      allow read: if isCompanyMember(request.auth.uid, resource.data.companyId);
+      allow write: if isCompanyAdmin(request.auth.uid, resource.data.companyId);
+    }
+
+    // Enhanced Audit Trail
+    match /auditTrails/{trailId} {
+      allow read: if isCompanyAdmin(request.auth.uid, resource.data.companyId) || isSuperAdmin(request.auth.uid);
+      allow write: if false; // Only system writes audit trails
     }
   }
-} 
+}

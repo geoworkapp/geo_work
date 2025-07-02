@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:admin\" \"npm run dev:functions\"",
     "dev:admin": "npm run dev --workspace=packages/web-admin",
-    "dev:functions": "npm run dev --workspace=packages/functions",
+    "dev:functions": "npm run dev --workspace=packages/geowork-functions",
     "build": "npm run build --workspaces",
     "build:admin": "npm run build --workspace=packages/web-admin",
     "build:functions": "npm run build --workspace=packages/functions",

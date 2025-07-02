@@ -1,0 +1,106 @@
+rules_version = '2';
+
+// Cloud Storage Security Rules for GeoWork Time Tracker
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper functions for authentication and authorization
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.role == 'superadmin';
+    }
+    
+    function isCompanyAdmin(companyId) {
+      return request.auth != null && 
+             request.auth.token.role == 'company_admin' && 
+             request.auth.token.companyId == companyId;
+    }
+    
+    function isCompanyMember(companyId) {
+      return request.auth != null && 
+             request.auth.token.companyId == companyId;
+    }
+    
+    function isValidImageFile() {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size < 5 * 1024 * 1024; // 5MB limit
+    }
+    
+    function isValidDocumentFile() {
+      return request.resource.contentType.matches('(application/pdf|application/msword|application/vnd.openxmlformats-officedocument.wordprocessingml.document|text/plain)') &&
+             request.resource.size < 10 * 1024 * 1024; // 10MB limit
+    }
+    
+    // User Profile Pictures
+    match /users/{userId}/profile/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isValidImageFile();
+      allow delete: if isOwner(userId) || isSuperAdmin();
+    }
+    
+    // Company Logos and Documents
+    match /companies/{companyId}/logo/{fileName} {
+      allow read: if isCompanyMember(companyId) || isSuperAdmin();
+      allow write: if isCompanyAdmin(companyId) && isValidImageFile();
+      allow delete: if isCompanyAdmin(companyId) || isSuperAdmin();
+    }
+    
+    match /companies/{companyId}/documents/{fileName} {
+      allow read: if isCompanyMember(companyId) || isSuperAdmin();
+      allow write: if isCompanyAdmin(companyId) && isValidDocumentFile();
+      allow delete: if isCompanyAdmin(companyId) || isSuperAdmin();
+    }
+    
+    // Job Site Photos and Documentation
+    match /jobSites/{siteId}/photos/{fileName} {
+      allow read: if isAuthenticated(); // Public for viewing job site photos
+      allow write: if isAuthenticated() && isValidImageFile(); // Any authenticated user can upload
+      allow delete: if isSuperAdmin(); // Only super admin can delete
+    }
+    
+    // Time Entry Attachments (receipts, photos, etc.)
+    match /timeEntries/{entryId}/attachments/{fileName} {
+      allow read: if isAuthenticated(); // Company members can view
+      allow write: if isAuthenticated() && (isValidImageFile() || isValidDocumentFile());
+      allow delete: if isAuthenticated() || isSuperAdmin();
+    }
+    
+    // Support Ticket Attachments
+    match /support/{ticketId}/attachments/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isValidImageFile() || isValidDocumentFile());
+      allow delete: if isSuperAdmin();
+    }
+    
+    // System and Platform Files (Super Admin Only)
+    match /system/{allPaths=**} {
+      allow read, write: if isSuperAdmin();
+    }
+    
+    // Temporary Upload Directory (24 hour auto-cleanup)
+    match /temp/{userId}/{fileName} {
+      allow read, write: if isOwner(userId) && 
+                           request.resource.size < 20 * 1024 * 1024; // 20MB limit for temp files
+      allow delete: if isOwner(userId) || isSuperAdmin();
+    }
+    
+    // Reports and Export Files
+    match /reports/{companyId}/{fileName} {
+      allow read: if isCompanyMember(companyId) || isSuperAdmin();
+      allow write: if false; // Only system can generate reports
+      allow delete: if isCompanyAdmin(companyId) || isSuperAdmin();
+    }
+    
+    // Default deny rule for any other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+} 
