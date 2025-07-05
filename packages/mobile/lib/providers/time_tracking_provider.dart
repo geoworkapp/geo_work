@@ -1,12 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+// import 'package:shared/models.dart'; 
 import '../firebase/firebase_service.dart';
+import '../utils/logger.dart';
 import 'auth_provider.dart';
 import 'location_provider.dart';
 import 'jobsites_provider.dart';
 
-// Time entry status enum
+// Time entry status enum for backward compatibility
 enum TimeEntryStatus {
   clockedIn,
   clockedOut,
@@ -14,7 +16,7 @@ enum TimeEntryStatus {
   breakEnded,
 }
 
-// Time entry model
+// Time entry model - temporary local definition
 class TimeEntry {
   final String entryId;
   final String employeeId;
@@ -40,36 +42,6 @@ class TimeEntry {
     this.metadata,
   });
 
-  factory TimeEntry.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    final locationData = data['location'] as Map<String, dynamic>;
-    
-    return TimeEntry(
-      entryId: doc.id,
-      employeeId: data['employeeId'] ?? '',
-      companyId: data['companyId'] ?? '',
-      jobSiteId: data['jobSiteId'] ?? '',
-      jobSiteName: data['jobSiteName'] ?? '',
-      status: _parseStatus(data['status']),
-      timestamp: (data['timestamp'] as Timestamp).toDate(),
-      location: Position(
-        latitude: locationData['latitude'],
-        longitude: locationData['longitude'],
-        timestamp: (data['timestamp'] as Timestamp).toDate(),
-        accuracy: locationData['accuracy'] ?? 0.0,
-        altitude: locationData['altitude'] ?? 0.0,
-        altitudeAccuracy: locationData['altitudeAccuracy'] ?? 0.0,
-        heading: locationData['heading'] ?? 0.0,
-        headingAccuracy: locationData['headingAccuracy'] ?? 0.0,
-        speed: locationData['speed'] ?? 0.0,
-        speedAccuracy: locationData['speedAccuracy'] ?? 0.0,
-        isMocked: locationData['isMocked'] ?? false,
-      ),
-      distanceFromJobSite: (data['distanceFromJobSite'] ?? 0.0).toDouble(),
-      metadata: data['metadata'],
-    );
-  }
-
   Map<String, dynamic> toMap() {
     return {
       'employeeId': employeeId,
@@ -82,32 +54,10 @@ class TimeEntry {
         'latitude': location.latitude,
         'longitude': location.longitude,
         'accuracy': location.accuracy,
-        'altitude': location.altitude,
-        'altitudeAccuracy': location.altitudeAccuracy,
-        'heading': location.heading,
-        'headingAccuracy': location.headingAccuracy,
-        'speed': location.speed,
-        'speedAccuracy': location.speedAccuracy,
-        'isMocked': location.isMocked,
       },
       'distanceFromJobSite': distanceFromJobSite,
       'metadata': metadata,
     };
-  }
-
-  static TimeEntryStatus _parseStatus(String? status) {
-    switch (status) {
-      case 'clockedIn':
-        return TimeEntryStatus.clockedIn;
-      case 'clockedOut':
-        return TimeEntryStatus.clockedOut;
-      case 'onBreak':
-        return TimeEntryStatus.onBreak;
-      case 'breakEnded':
-        return TimeEntryStatus.breakEnded;
-      default:
-        return TimeEntryStatus.clockedOut;
-    }
   }
 }
 
@@ -194,10 +144,10 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     }
   }
 
-  // Load today's time entries
+  // Load today's time entries using shared TimeEntry model
   Future<void> loadTodayEntries() async {
     final user = _ref.read(currentUserProvider);
-    if (user == null) return;
+    if (user?.id == null) return;
 
     try {
       state = state.copyWith(isLoading: true, error: null);
@@ -208,14 +158,14 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
 
       final querySnapshot = await _firebaseService.firestore
           .collection('timeEntries')
-          .where('employeeId', isEqualTo: user.uid)
+          .where('employeeId', isEqualTo: user!.id)
           .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
           .where('timestamp', isLessThan: Timestamp.fromDate(endOfDay))
           .orderBy('timestamp', descending: true)
           .get();
 
       final entries = querySnapshot.docs
-          .map((doc) => TimeEntry.fromFirestore(doc))
+          .map((doc) => _timeEntryFromFirestore(doc))
           .toList();
 
       state = state.copyWith(
@@ -223,10 +173,57 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
         isLoading: false,
       );
     } catch (e) {
+      // Log error - removed AppLogger import
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load today\'s entries: $e',
       );
+    }
+  }
+
+  // Convert Firestore document to TimeEntry using local model
+  TimeEntry _timeEntryFromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final locationData = data['location'] as Map<String, dynamic>? ?? {};
+    
+    return TimeEntry(
+      entryId: doc.id,
+      employeeId: data['employeeId'] ?? data['userId'] ?? '', // Support new field name
+      companyId: data['companyId'] ?? '',
+      jobSiteId: data['jobSiteId'] ?? data['siteId'] ?? '', // Support both field names
+      jobSiteName: data['jobSiteName'] ?? '',
+      status: _parseStatus(data['status']),
+      timestamp: (data['timestamp'] as Timestamp).toDate(),
+      location: Position(
+        latitude: locationData['latitude'] ?? 0.0,
+        longitude: locationData['longitude'] ?? 0.0,
+        timestamp: (data['timestamp'] as Timestamp).toDate(),
+        accuracy: locationData['accuracy'] ?? 0.0,
+        altitude: locationData['altitude'] ?? 0.0,
+        altitudeAccuracy: locationData['altitudeAccuracy'] ?? 0.0,
+        heading: locationData['heading'] ?? 0.0,
+        headingAccuracy: locationData['headingAccuracy'] ?? 0.0,
+        speed: locationData['speed'] ?? 0.0,
+        speedAccuracy: locationData['speedAccuracy'] ?? 0.0,
+        isMocked: locationData['isMocked'] ?? false,
+      ),
+      distanceFromJobSite: (data['distanceFromJobSite'] ?? 0.0).toDouble(),
+      metadata: data['metadata'],
+    );
+  }
+
+  TimeEntryStatus _parseStatus(String? status) {
+    switch (status) {
+      case 'clockedIn':
+        return TimeEntryStatus.clockedIn;
+      case 'clockedOut':
+        return TimeEntryStatus.clockedOut;
+      case 'onBreak':
+        return TimeEntryStatus.onBreak;
+      case 'breakEnded':
+        return TimeEntryStatus.breakEnded;
+      default:
+        return TimeEntryStatus.clockedOut;
     }
   }
 
@@ -332,7 +329,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
       // Create time entry
       final timeEntry = TimeEntry(
         entryId: '',
-        employeeId: user.uid,
+        employeeId: user.id,
         companyId: user.companyId!,
         jobSiteId: jobSiteId,
         jobSiteName: jobSite.siteName,
@@ -383,11 +380,11 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
 
   // Clock out
   Future<bool> clockOut() async {
-    print('🔧 Clock out started - Current state: ${state.isClockedIn}');
+    log.info('Clock out started - Current state: ${state.isClockedIn}');
     
     // Prevent multiple clock outs
     if (!state.canClockOut) {
-      print('🔧 Cannot clock out - canClockOut: false');
+      log.warning('Cannot clock out - canClockOut: false');
       return false;
     }
 
@@ -397,14 +394,14 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
 
     if (user == null || currentShift == null || position == null) {
       state = state.copyWith(error: 'Unable to clock out: missing required data');
-      print('🔧 Clock out failed - Missing data');
+      log.warning('Clock out failed - Missing data');
       return false;
     }
 
     try {
       // Set processing flag first
       state = state.copyWith(isProcessingEntry: true, error: null);
-      print('🔧 Processing clock out - Setting processing flag');
+      log.info('Processing clock out - Setting processing flag');
 
       // Get job site for validation
       final jobSite = _ref.read(jobSitesProvider.notifier).getAssignedJobSiteById(currentShift.jobSiteId);
@@ -422,7 +419,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
       // Create time entry
       final timeEntry = TimeEntry(
         entryId: '',
-        employeeId: user.uid,
+        employeeId: user.id,
         companyId: user.companyId!,
         jobSiteId: currentShift.jobSiteId,
         jobSiteName: currentShift.jobSiteName,
@@ -433,11 +430,10 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
         metadata: {
           'accuracy': position.accuracy,
           'clockOutType': 'manual',
-          'shiftDuration': DateTime.now().difference(currentShift.startTime).inMinutes,
         },
       );
 
-      print('🔧 Saving clock out entry to Firestore');
+      log.info('Saving clock out entry to Firestore');
       // Save to Firestore
       await _firebaseService.firestore
           .collection('timeEntries')
@@ -446,7 +442,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
       // Update state with new entry and clear current shift
       final updatedEntries = [timeEntry, ...state.todayEntries];
       
-      print('🔧 Updating state - Clearing current shift');
+      log.info('Updating state - Clearing current shift');
       // Important: Set currentShift to null since we're clocked out
       state = TimeTrackingState(
         currentShift: null,
@@ -455,13 +451,167 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
         recentEntries: state.recentEntries,
       );
 
-      print('🔧 Clock out complete - New state: isClockedIn=${state.isClockedIn}');
+      log.info('Clock out complete - New state: isClockedIn=${state.isClockedIn}');
       return true;
     } catch (e) {
-      print('🔧 Clock out failed - Error: $e');
+      log.severe('Clock out failed - Error: $e');
       state = state.copyWith(
         isProcessingEntry: false,
         error: 'Failed to clock out: $e',
+      );
+      return false;
+    }
+  }
+
+  // Start break
+  Future<bool> startBreak() async {
+    final user = _ref.read(currentUserProvider);
+    final currentShift = state.currentShift;
+    final position = await _ref.read(locationProvider.notifier).getCurrentLocation();
+
+    if (user == null || currentShift == null || position == null || !state.canTakeBreak) {
+      state = state.copyWith(error: 'Unable to start break: invalid state');
+      return false;
+    }
+
+    try {
+      state = state.copyWith(isProcessingEntry: true, error: null);
+
+      // Get job site for distance calculation
+      final jobSite = _ref.read(jobSitesProvider.notifier).getAssignedJobSiteById(currentShift.jobSiteId);
+      double distance = 0;
+      if (jobSite != null) {
+        distance = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          jobSite.location.latitude,
+          jobSite.location.longitude,
+        );
+      }
+
+      // Create break start entry
+      final timeEntry = TimeEntry(
+        entryId: '',
+        employeeId: user.id,
+        companyId: user.companyId!,
+        jobSiteId: currentShift.jobSiteId,
+        jobSiteName: currentShift.jobSiteName,
+        status: TimeEntryStatus.onBreak,
+        timestamp: DateTime.now(),
+        location: position,
+        distanceFromJobSite: distance,
+        metadata: {
+          'accuracy': position.accuracy,
+          'clockInType': 'manual',
+        },
+      );
+
+      // Save to Firestore
+      await _firebaseService.firestore
+          .collection('timeEntries')
+          .add(timeEntry.toMap());
+
+      // Update state
+      final updatedEntries = [timeEntry, ...state.todayEntries];
+      final updatedShift = CurrentShift(
+        shiftId: currentShift.shiftId,
+        jobSiteId: currentShift.jobSiteId,
+        jobSiteName: currentShift.jobSiteName,
+        startTime: currentShift.startTime,
+        workDuration: currentShift.workDuration,
+        breakDuration: currentShift.breakDuration,
+        currentStatus: TimeEntryStatus.onBreak,
+        isOnBreak: true,
+      );
+
+      state = state.copyWith(
+        currentShift: updatedShift,
+        todayEntries: updatedEntries,
+        isProcessingEntry: false,
+      );
+
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isProcessingEntry: false,
+        error: 'Failed to start break: $e',
+      );
+      return false;
+    }
+  }
+
+  // End break
+  Future<bool> endBreak() async {
+    final user = _ref.read(currentUserProvider);
+    final currentShift = state.currentShift;
+    final position = await _ref.read(locationProvider.notifier).getCurrentLocation();
+
+    if (user == null || currentShift == null || position == null || !state.canEndBreak) {
+      state = state.copyWith(error: 'Unable to end break: invalid state');
+      return false;
+    }
+
+    try {
+      state = state.copyWith(isProcessingEntry: true, error: null);
+
+      // Get job site for distance calculation
+      final jobSite = _ref.read(jobSitesProvider.notifier).getAssignedJobSiteById(currentShift.jobSiteId);
+      double distance = 0;
+      if (jobSite != null) {
+        distance = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          jobSite.location.latitude,
+          jobSite.location.longitude,
+        );
+      }
+
+      // Create break end entry
+      final timeEntry = TimeEntry(
+        entryId: '',
+        employeeId: user.id,
+        companyId: user.companyId!,
+        jobSiteId: currentShift.jobSiteId,
+        jobSiteName: currentShift.jobSiteName,
+        status: TimeEntryStatus.breakEnded,
+        timestamp: DateTime.now(),
+        location: position,
+        distanceFromJobSite: distance,
+        metadata: {
+          'accuracy': position.accuracy,
+          'clockOutType': 'manual',
+        },
+      );
+
+      // Save to Firestore
+      await _firebaseService.firestore
+          .collection('timeEntries')
+          .add(timeEntry.toMap());
+
+      // Update state
+      final updatedEntries = [timeEntry, ...state.todayEntries];
+      final updatedShift = CurrentShift(
+        shiftId: currentShift.shiftId,
+        jobSiteId: currentShift.jobSiteId,
+        jobSiteName: currentShift.jobSiteName,
+        startTime: currentShift.startTime,
+        workDuration: currentShift.workDuration,
+        breakDuration: currentShift.breakDuration,
+        currentStatus: TimeEntryStatus.breakEnded,
+        isOnBreak: false,
+      );
+
+      state = state.copyWith(
+        currentShift: updatedShift,
+        todayEntries: updatedEntries,
+        isProcessingEntry: false,
+      );
+
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isProcessingEntry: false,
+        error: 'Failed to end break: $e',
       );
       return false;
     }
@@ -523,6 +673,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     try {
       state = state.copyWith(isLoading: true, error: null);
       await loadTodayEntries();
+      await loadRecentEntries();
       await loadCurrentShift();
       state = state.copyWith(isLoading: false);
     } catch (e) {
@@ -530,6 +681,55 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
         isLoading: false,
         error: 'Failed to refresh: $e',
       );
+    }
+  }
+
+  // Load recent entries (last 30 days)
+  Future<void> loadRecentEntries() async {
+    final user = _ref.read(currentUserProvider);
+    if (user == null) return;
+
+    try {
+      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+
+      final querySnapshot = await _firebaseService.firestore
+          .collection('timeEntries')
+          .where('employeeId', isEqualTo: user.id)
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(thirtyDaysAgo))
+          .orderBy('timestamp', descending: true)
+          .limit(200) // Limit to prevent large data loads
+          .get();
+
+      final entries = querySnapshot.docs
+          .map((doc) => _timeEntryFromFirestore(doc))
+          .toList();
+
+      state = state.copyWith(recentEntries: entries);
+    } catch (e) {
+      // Don't set error for recent entries, as it's not critical
+      log.warning('Failed to load recent entries: $e');
+    }
+  }
+
+  // Load entries for specific date range
+  Future<List<TimeEntry>> loadEntriesForDateRange(DateTime start, DateTime end) async {
+    final user = _ref.read(currentUserProvider);
+    if (user == null) return [];
+
+    try {
+      final querySnapshot = await _firebaseService.firestore
+          .collection('timeEntries')
+          .where('employeeId', isEqualTo: user.id)
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+          .where('timestamp', isLessThan: Timestamp.fromDate(end.add(const Duration(days: 1))))
+          .orderBy('timestamp', descending: true)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => _timeEntryFromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to load entries for date range: $e');
     }
   }
 }

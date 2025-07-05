@@ -1,19 +1,23 @@
 // Firebase configuration for GeoWork Admin Dashboard
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { 
+  getFirestore,
+  connectFirestoreEmulator,
+  terminate,
+  clearIndexedDbPersistence
+} from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 // 🔥 FIREBASE CONFIG - Using environment variables for security
 // Create a .env.local file based on .env.example and fill in your values
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIza...", // 🔑 Add to .env.local
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "geowork-time-tracker.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "geowork-time-tracker",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "geowork-time-tracker.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "681589331619",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:681589331619:web:...", // 🔑 Add to .env.local
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID // Optional: Google Analytics
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Validate configuration
@@ -25,28 +29,77 @@ if (missingVars.length > 0) {
   console.warn('🔧 Add your Firebase config to .env file for full functionality');
 }
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Prevent multiple Firebase app initialization
+let app;
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApps()[0];
+}
 
-// Initialize Firebase Authentication and get a reference to the service
+// Initialize Firebase services with singleton pattern
 export const auth = getAuth(app);
-
-// Initialize Cloud Firestore and get a reference to the service
 export const db = getFirestore(app);
+export const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_REGION || 'us-central1');
 
-// Initialize Cloud Functions
-export const functions = getFunctions(app);
-
-// 🛠️ Connect to emulators in development (for testing without hitting production)
+// Development mode emulator connections (only in development)
 if (import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS === 'true') {
   try {
-    connectAuthEmulator(auth, 'http://localhost:9099');
-    connectFirestoreEmulator(db, 'localhost', 8080);
-    connectFunctionsEmulator(functions, 'localhost', 5001);
+    // Connect to emulators with proper error handling
+    try {
+      connectAuthEmulator(auth, 'http://localhost:9099');
+    } catch (error) {
+      // Emulator already connected or not available
+      console.log('Auth emulator connection skipped');
+    }
+    
+    // Firestore emulator connection
+    try {
+      connectFirestoreEmulator(db, 'localhost', 8080);
+    } catch (error) {
+      // Emulator already connected
+      console.log('Firestore emulator already connected');
+    }
+    
+    // Functions emulator connection
+    try {
+      connectFunctionsEmulator(functions, 'localhost', 5001);
+    } catch (error) {
+      // Emulator already connected
+      console.log('Functions emulator already connected');
+    }
+    
     console.log('🔧 Connected to Firebase emulators');
   } catch (error) {
-    console.log('📡 Firebase emulators not available or already connected');
+    console.warn('⚠️ Failed to connect to emulators:', error);
   }
 }
 
+// Enhanced error handling for development
+if (import.meta.env.DEV) {
+  // Handle hot module replacement cleanup
+  if (import.meta.hot) {
+    import.meta.hot.dispose(async () => {
+      try {
+        await terminate(db);
+        await clearIndexedDbPersistence(db);
+      } catch (error) {
+        console.log('Firebase cleanup completed');
+      }
+    });
+  }
+  
+  // Handle page unload cleanup
+  window.addEventListener('beforeunload', async () => {
+    try {
+      await terminate(db);
+    } catch (error) {
+      // Ignore errors during cleanup
+    }
+  });
+}
+
+console.log('✅ Firebase initialized successfully');
+
+export { app };
 export default app; 

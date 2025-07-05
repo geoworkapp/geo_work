@@ -4,10 +4,14 @@ import 'firebase/firebase_service.dart';
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
+import 'utils/logger.dart';
 
 void main() async {
   // Ensure Flutter bindings are initialized
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize logging
+  setupLogging();
   
   // Initialize Firebase
   await FirebaseService.instance.initialize();
@@ -127,7 +131,7 @@ class AuthWrapper extends ConsumerWidget {
     final authState = ref.watch(authProvider);
     
     // Show loading screen while checking auth state
-    if (authState.isLoading) {
+          if (authState.loading) {
       return const LoadingScreen();
     }
     
@@ -161,7 +165,7 @@ class LoadingScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withAlpha((0.1 * 255).round()),
                     blurRadius: 10,
                     offset: const Offset(0, 5),
                   ),

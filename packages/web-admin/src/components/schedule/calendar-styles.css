@@ -1,0 +1,413 @@
+/* React Big Calendar Custom Styles for GeoWork */
+
+/* Main calendar container enhancements */
+.rbc-calendar {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: white;
+  height: 100%;
+  min-height: 500px; /* Ensure minimum height for proper display */
+}
+
+/* Calendar views - minimal overrides */
+.rbc-month-view {
+  height: 100%;
+}
+
+/* Let default month row behavior work, just enhance sizing */
+.rbc-month-row {
+  min-height: 80px;
+}
+
+/* Ensure header row displays properly */
+.rbc-row.rbc-row-bg {
+  display: flex; /* Day headers should be horizontal */
+}
+
+.rbc-header {
+  flex: 1; /* Headers should equally distribute width */
+}
+
+/* Time view enhancements */
+.rbc-time-view {
+  height: 100%;
+}
+
+/* Toolbar styling enhancements */
+.rbc-toolbar {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background: white;
+  min-height: 60px;
+}
+
+/* Responsive enhancements */
+@media (min-width: 1440px) {
+  .rbc-calendar {
+    border-radius: 12px;
+  }
+
+  .rbc-toolbar {
+    padding: 16px 20px;
+  }
+
+  .rbc-header {
+    padding: 14px 10px;
+    font-size: 0.9rem;
+  }
+
+  .rbc-day-bg {
+    min-height: 100px;
+  }
+}
+
+/* Header styling - enhance, don't override structure */
+.rbc-header {
+  padding: 12px 8px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Today's header highlight */
+.rbc-today .rbc-header {
+  background: linear-gradient(135deg, #f57c00 0%, #ff9800 100%);
+}
+
+/* Date cells - minimal styling */
+.rbc-date-cell {
+  padding: 8px;
+  font-size: 0.875rem;
+  color: #333;
+}
+
+.rbc-date-cell.rbc-now {
+  font-weight: 600;
+  color: #1976d2;
+}
+
+/* Calendar body - minimal height enhancement */
+.rbc-day-bg {
+  min-height: 80px;
+}
+
+/* Today's date */
+.rbc-today {
+  background-color: #e3f2fd;
+  position: relative;
+}
+
+.rbc-today::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(135deg, #2196F3 0%, #64B5F6 100%);
+}
+
+.rbc-today .rbc-date-cell a {
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+  color: white;
+  padding: 6px 10px;
+  border-radius: 20px;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
+}
+
+/* Off-range dates (previous/next month) */
+.rbc-off-range-bg {
+  background-color: #fafafa;
+}
+
+.rbc-off-range {
+  color: #bdbdbd;
+}
+
+.rbc-off-range .rbc-date-cell {
+  opacity: 0.5;
+}
+
+/* Day cell content */
+.rbc-day-bg {
+  transition: background-color 0.2s;
+}
+
+.rbc-day-bg:hover {
+  background-color: #f5f5f5;
+}
+
+/* Remove complex layout overrides - let default behavior work */
+
+/* Event styling */
+.rbc-event {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.rbc-event.rbc-selected {
+  background-color: transparent;
+}
+
+.rbc-event:focus {
+  outline: none;
+}
+
+.rbc-event-content {
+  font-size: 0.875rem;
+  height: 100%;
+}
+
+/* Time Grid */
+.rbc-time-column {
+  background: #fff;
+}
+
+.rbc-timeslot-group {
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.rbc-time-gutter {
+  font-size: 0.75rem;
+  color: #666;
+  padding-right: 8px;
+  background: #fafafa;
+}
+
+/* Current time indicator */
+.rbc-current-time-indicator {
+  height: 2px;
+  background-color: #f44336;
+  opacity: 0.7;
+}
+
+/* Selection highlight */
+.rbc-slot-selection {
+  background-color: rgba(25, 118, 210, 0.1);
+}
+
+.rbc-slot-selecting {
+  cursor: move;
+}
+
+/* Week and day view styling */
+.rbc-time-slot {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+/* Toolbar styling */
+.rbc-toolbar button {
+  color: #666;
+  border: 1px solid #e0e0e0;
+  background: white;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rbc-toolbar button:hover {
+  background-color: #f5f5f5;
+  border-color: #bdbdbd;
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: #1976d2;
+  color: white;
+  border-color: #1976d2;
+}
+
+/* Show more link */
+.rbc-show-more {
+  color: #1976d2;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #e3f2fd;
+  border: 1px solid #bbdefb;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  margin: 2px 4px;
+}
+
+.rbc-show-more:hover {
+  background: #1976d2;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+}
+
+/* Scrollable content for tall calendars */
+.rbc-time-view {
+  max-height: calc(100vh - 250px);
+  overflow-y: auto;
+}
+
+/* Custom scrollbar */
+.rbc-time-view::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rbc-time-view::-webkit-scrollbar-track {
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.rbc-time-view::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #1976d2 0%, #42a5f5 100%);
+  border-radius: 4px;
+}
+
+.rbc-time-view::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #1565c0 0%, #1976d2 100%);
+}
+
+/* Animation for event creation */
+@keyframes eventCreated {
+  0% {
+    transform: scale(0.8) translateY(-10px);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1) translateY(-5px);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.rbc-event.newly-created {
+  animation: eventCreated 0.6s ease-out;
+}
+
+/* Loading state */
+.rbc-calendar.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.rbc-calendar.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #1976d2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Hover effects */
+.rbc-event:hover {
+  z-index: 3;
+}
+
+/* Better time column */
+.rbc-time-gutter {
+  font-size: 0.875rem;
+  color: #666;
+  background: #fafafa;
+  border-right: 1px solid #e0e0e0;
+}
+
+/* Today column highlight */
+.rbc-today {
+  background-color: #e3f2fd !important;
+}
+
+/* Event overlapping */
+.rbc-event-overlaps {
+  box-shadow: -1px 1px 5px rgba(0,0,0,0.2);
+}
+
+/* Selection highlight */
+.rbc-selection-bg {
+  background-color: rgba(25, 118, 210, 0.1);
+}
+
+/* Agenda view improvements */
+.rbc-agenda-view table.rbc-agenda-table {
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  border-spacing: 0;
+  border-collapse: separate;
+}
+
+.rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  padding: 12px;
+  background: #fafafa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.rbc-agenda-view table.rbc-agenda-table tbody > tr > td {
+  padding: 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+/* Time grid background */
+.rbc-time-column .rbc-day-bg {
+  border-left: 1px solid #e0e0e0;
+}
+
+/* Better event continuation indicators */
+.rbc-event-continues-prior {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.rbc-event-continues-after {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Improve time slot labels */
+.rbc-time-slot {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+/* Custom scrollbars */
+.rbc-time-content {
+  scrollbar-width: thin;
+  scrollbar-color: #bdbdbd #f5f5f5;
+}
+
+.rbc-time-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rbc-time-content::-webkit-scrollbar-track {
+  background: #f5f5f5;
+}
+
+.rbc-time-content::-webkit-scrollbar-thumb {
+  background-color: #bdbdbd;
+  border-radius: 4px;
+  border: 2px solid #f5f5f5;
+}
+
+/* Ensure events never overflow into adjacent day cells in month view */
+.rbc-month-view .rbc-event,
+.rbc-month-view .rbc-event-content {
+  max-width: 100% !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+} 

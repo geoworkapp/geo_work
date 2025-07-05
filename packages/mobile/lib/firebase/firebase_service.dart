@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logging/logging.dart';
 import '../firebase_options.dart';
 
 class FirebaseService {
@@ -13,6 +14,7 @@ class FirebaseService {
   late FirebaseApp _app;
   late FirebaseAuth _auth;
   late FirebaseFirestore _firestore;
+  final _logger = Logger('FirebaseService');
 
   // Getters
   FirebaseApp get app => _app;
@@ -35,9 +37,9 @@ class FirebaseService {
       //   _firestore.useFirestoreEmulator('localhost', 8080);
       // }
       
-      print('🔥 Firebase initialized successfully');
+      _logger.info('Firebase initialized successfully');
     } catch (e) {
-      print('❌ Firebase initialization failed: $e');
+      _logger.severe('Firebase initialization failed: $e');
       rethrow;
     }
   }
@@ -61,10 +63,10 @@ class FirebaseService {
         email: email,
         password: password,
       );
-      print('✅ User signed in: ${result.user?.email}');
+      _logger.info('User signed in: ${result.user?.email}');
       return result;
     } on FirebaseAuthException catch (e) {
-      print('❌ Sign in error: ${e.code} - ${e.message}');
+      _logger.severe('Sign in error: ${e.code} - ${e.message}');
       throw _handleAuthException(e);
     }
   }
@@ -79,10 +81,10 @@ class FirebaseService {
         email: email,
         password: password,
       );
-      print('✅ User created: ${result.user?.email}');
+      _logger.info('User created: ${result.user?.email}');
       return result;
     } on FirebaseAuthException catch (e) {
-      print('❌ Sign up error: ${e.code} - ${e.message}');
+      _logger.severe('Sign up error: ${e.code} - ${e.message}');
       throw _handleAuthException(e);
     }
   }
@@ -91,9 +93,9 @@ class FirebaseService {
   Future<void> signOut() async {
     try {
       await _auth.signOut();
-      print('✅ User signed out');
+      _logger.info('User signed out');
     } catch (e) {
-      print('❌ Sign out error: $e');
+      _logger.severe('Sign out error: $e');
       rethrow;
     }
   }

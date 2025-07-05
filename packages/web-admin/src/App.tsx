@@ -16,6 +16,7 @@ import {
 // Context and Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginForm } from './components/auth/LoginForm';
+import { CompanyRegistration } from './components/auth/CompanyRegistration';
 import DashboardLayout from './components/layout/DashboardLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import JobSitesList from './components/jobsites/JobSitesList';
@@ -23,6 +24,8 @@ import JobSiteCreation from './components/jobsites/JobSiteCreation';
 import EmployeesList from './components/employees/EmployeesList';
 import EmployeeCreation from './components/employees/EmployeeCreation';
 import EmployeeEdit from './components/employees/EmployeeEdit';
+import ScheduleManagement from './components/schedule/ScheduleManagement';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -69,6 +72,27 @@ const theme = createTheme({
           borderRadius: 8,
           textTransform: 'none',
           fontWeight: 600,
+        },
+      },
+    },
+    // Ensure CssBaseline doesn't interfere with our full-viewport layout
+    MuiCssBaseline: {
+      styleOverrides: {
+        html: {
+          height: '100%',
+          width: '100%',
+        },
+        body: {
+          height: '100%',
+          width: '100%',
+          margin: 0,
+          padding: 0,
+          overflow: 'hidden', // Prevent body scroll
+        },
+        '#root': {
+          height: '100vh',
+          width: '100vw',
+          overflow: 'hidden',
         },
       },
     },
@@ -128,89 +152,102 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <Router>
-          <Routes>
-            {/* Public Routes */}
-            <Route
-              path="/login"
-              element={
-                <PublicRoute>
-                  <LoginForm />
-                </PublicRoute>
-              }
-            />
+        <ErrorBoundary>
+          <Router>
+            <Routes>
+              {/* Public Routes */}
+              <Route
+                path="/login"
+                element={
+                  <PublicRoute>
+                    <LoginForm />
+                  </PublicRoute>
+                }
+              />
+              <Route
+                path="/register-company"
+                element={
+                  <PublicRoute>
+                    <CompanyRegistration />
+                  </PublicRoute>
+                }
+              />
 
-            {/* Protected Routes */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Dashboard />} />
-              
-              {/* Job Sites Routes */}
-              <Route path="jobsites" element={<JobSitesList />} />
-              <Route path="jobsites/new" element={<JobSiteCreation />} />
-              
-              {/* Employee Routes */}
-              <Route path="employees" element={<EmployeesList />} />
-              <Route path="employees/new" element={<EmployeeCreation />} />
-              <Route path="employees/edit/:id" element={<EmployeeEdit />} />
+              {/* Protected Routes */}
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Dashboard />} />
+                
+                {/* Job Sites Routes */}
+                <Route path="jobsites" element={<JobSitesList />} />
+                <Route path="jobsites/new" element={<JobSiteCreation />} />
+                
+                {/* Employee Routes */}
+                <Route path="employees" element={<EmployeesList />} />
+                <Route path="employees/new" element={<EmployeeCreation />} />
+                <Route path="employees/edit/:id" element={<EmployeeEdit />} />
 
-              {/* Time Tracking */}
-              <Route path="time-tracking" element={
-                <Box>
-                  <h1>Time Tracking Page</h1>
-                  <p>Time tracking overview will be implemented in Phase 2</p>
-                </Box>
-              } />
+                {/* Schedule Routes */}
+                <Route path="schedule" element={<ScheduleManagement />} />
 
-              {/* Reports */}
-              <Route path="reports" element={
-                <Box>
-                  <h1>Reports Page</h1>
-                  <p>Reporting dashboard will be implemented in Phase 4</p>
-                </Box>
-              } />
+                {/* Time Tracking */}
+                <Route path="time-tracking" element={
+                  <Box>
+                    <h1>Time Tracking Page</h1>
+                    <p>Time tracking overview will be implemented in Phase 2</p>
+                  </Box>
+                } />
 
-              {/* Settings */}
-              <Route path="settings" element={
-                <Box>
-                  <h1>Settings Page</h1>
-                  <p>Settings and configuration will be implemented in Phase 2</p>
-                </Box>
-              } />
+                {/* Reports */}
+                <Route path="reports" element={
+                  <Box>
+                    <h1>Reports Page</h1>
+                    <p>Reporting dashboard will be implemented in Phase 4</p>
+                  </Box>
+                } />
 
-              {/* Super Admin Routes */}
-              <Route path="platform/analytics" element={
-                <Box>
-                  <h1>Platform Analytics</h1>
-                  <p>Super admin analytics will be implemented in Phase 7</p>
-                </Box>
-              } />
+                {/* Settings */}
+                <Route path="settings" element={
+                  <Box>
+                    <h1>Settings Page</h1>
+                    <p>Settings and configuration will be implemented in Phase 2</p>
+                  </Box>
+                } />
 
-              <Route path="platform/customers" element={
-                <Box>
-                  <h1>Customer Management</h1>
-                  <p>Customer management will be implemented in Phase 7</p>
-                </Box>
-              } />
+                {/* Super Admin Routes */}
+                <Route path="platform/analytics" element={
+                  <Box>
+                    <h1>Platform Analytics</h1>
+                    <p>Super admin analytics will be implemented in Phase 7</p>
+                  </Box>
+                } />
 
-              <Route path="platform/health" element={
-                <Box>
-                  <h1>System Health</h1>
-                  <p>System health monitoring will be implemented in Phase 7</p>
-                </Box>
-              } />
-            </Route>
+                <Route path="platform/customers" element={
+                  <Box>
+                    <h1>Customer Management</h1>
+                    <p>Customer management will be implemented in Phase 7</p>
+                  </Box>
+                } />
 
-            {/* Catch all redirect to dashboard */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Router>
+                <Route path="platform/health" element={
+                  <Box>
+                    <h1>System Health</h1>
+                    <p>System health monitoring will be implemented in Phase 7</p>
+                  </Box>
+                } />
+              </Route>
+
+              {/* Catch all redirect to dashboard */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Router>
+        </ErrorBoundary>
       </AuthProvider>
     </ThemeProvider>
   );

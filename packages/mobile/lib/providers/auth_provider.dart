@@ -1,14 +1,16 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
+import 'package:shared/models.dart';
 import '../firebase/firebase_service.dart';
 
-// User role enum
+// User role enum for backward compatibility
 enum UserRole { superAdmin, companyAdmin, employee }
 
 // Extended user class with company and role information
 class GeoWorkUser {
-  final User firebaseUser;
+  final firebase_auth.User firebaseUser;
   final UserRole? role;
   final String? companyId;
   final String? companyName;
@@ -24,7 +26,7 @@ class GeoWorkUser {
   String? get email => firebaseUser.email;
   String? get displayName => firebaseUser.displayName;
 
-  factory GeoWorkUser.fromFirebaseUser(User user, {
+  factory GeoWorkUser.fromFirebaseUser(firebase_auth.User user, {
     UserRole? role,
     String? companyId,
     String? companyName,
@@ -36,28 +38,58 @@ class GeoWorkUser {
       companyName: companyName,
     );
   }
+
+  // Convert to shared User model
+  User toSharedUser() {
+    return User(
+      id: uid,
+      email: email ?? '',
+      profile: UserProfile(
+        firstName: displayName?.split(' ').first ?? '',
+        lastName: displayName?.split(' ').skip(1).join(' ') ?? '',
+      ),
+      role: _mapRoleToString(role),
+      companyId: companyId,
+      isActive: true,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  String _mapRoleToString(UserRole? role) {
+    switch (role) {
+      case UserRole.superAdmin:
+        return 'superadmin';
+      case UserRole.companyAdmin:
+        return 'company_admin';
+      case UserRole.employee:
+        return 'employee';
+      default:
+        return 'employee';
+    }
+  }
 }
 
 // Auth state class
 class AuthState {
-  final GeoWorkUser? user;
-  final bool isLoading;
+  final User? user;
+  final bool loading;
   final String? error;
 
   const AuthState({
     this.user,
-    this.isLoading = false,
+    this.loading = false,
     this.error,
   });
 
   AuthState copyWith({
-    GeoWorkUser? user,
-    bool? isLoading,
+    User? user,
+    bool? loading,
     String? error,
   }) {
     return AuthState(
       user: user ?? this.user,
-      isLoading: isLoading ?? this.isLoading,
+      loading: loading ?? this.loading,
       error: error ?? this.error,
     );
   }
@@ -67,36 +99,37 @@ class AuthState {
 
 // Auth notifier class
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(const AuthState(isLoading: true)) {
+  AuthNotifier() : super(const AuthState(user: null, loading: true, error: null)) {
     _init();
   }
 
   final FirebaseService _firebaseService = FirebaseService.instance;
+  final _logger = Logger('AuthNotifier');
 
   // Initialize auth listener
   void _init() {
-    _firebaseService.authStateChanges.listen((User? user) async {
+    _firebaseService.authStateChanges.listen((firebase_auth.User? user) async {
       if (user != null) {
         await _loadUserData(user);
       } else {
-        state = const AuthState(isLoading: false);
+        state = const AuthState(user: null, loading: false, error: null);
       }
     });
   }
 
   // Load user data from Firestore
-  Future<void> _loadUserData(User user) async {
+  Future<void> _loadUserData(firebase_auth.User user) async {
     try {
-      print('🔍 Loading user data for: ${user.uid}');
-      state = state.copyWith(isLoading: true, error: null);
+      _logger.info('Loading user data for: ${user.uid}');
+      state = state.copyWith(loading: true, error: null);
 
-      print('🔍 Attempting to read user document from collection: users, doc: ${user.uid}');
+      _logger.info('Attempting to read user document from collection: users, doc: ${user.uid}');
       final userDoc = await _firebaseService.firestore
           .collection('users')
           .doc(user.uid)
           .get();
 
-      print('📋 User doc exists: ${userDoc.exists}');
+      _logger.info('User doc exists: ${userDoc.exists}');
 
       UserRole? role;
       String? companyId;
@@ -104,14 +137,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       if (userDoc.exists) {
         final data = userDoc.data()!;
-        print('👤 User data: $data');
+        _logger.info('User data: $data');
         role = _parseUserRole(data['role']);
         companyId = data['companyId'];
         companyName = data['companyName'];
-        print('🏢 Parsed - Role: $role, CompanyId: $companyId, CompanyName: $companyName');
+        _logger.info('Parsed - Role: $role, CompanyId: $companyId, CompanyName: $companyName');
       } else {
-        print('⚠️ No user document found with UID as document ID');
-        print('🔍 Searching for user by email: ${user.email}');
+        _logger.warning('No user document found with UID as document ID');
+        _logger.info('Searching for user by email: ${user.email}');
         
         // Try to find user document by email (for users created through web admin)
         if (user.email != null) {
@@ -121,18 +154,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
               .limit(1)
               .get();
           
-          print('📧 Email query returned ${emailQuery.docs.length} results');
+          _logger.info('Email query returned ${emailQuery.docs.length} results');
           
           if (emailQuery.docs.isNotEmpty) {
             final emailUserDoc = emailQuery.docs.first;
             final data = emailUserDoc.data();
-            print('👤 Found user by email: $data');
+            _logger.info('Found user by email: $data');
             role = _parseUserRole(data['role']);
             companyId = data['companyId'];
             companyName = data['companyName'];
-            print('🏢 Parsed from email search - Role: $role, CompanyId: $companyId, CompanyName: $companyName');
+            _logger.info('Parsed from email search - Role: $role, CompanyId: $companyId, CompanyName: $companyName');
           } else {
-            print('❌ No user document found by email either');
+            _logger.warning('No user document found by email either');
           }
         }
       }
@@ -144,16 +177,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
         companyName: companyName,
       );
 
-      print('✅ Created GeoWorkUser - CompanyId: ${geoWorkUser.companyId}');
-      state = AuthState(user: geoWorkUser, isLoading: false);
+      _logger.info('Created GeoWorkUser - CompanyId: ${geoWorkUser.companyId}');
+      
+      // Convert to shared User model
+      final sharedUser = geoWorkUser.toSharedUser();
+      state = AuthState(user: sharedUser, loading: false, error: null);
     } catch (e) {
-      print('❌ Error loading user data: $e');
-      print('❌ Error type: ${e.runtimeType}');
+      _logger.severe('Error loading user data: $e');
+      _logger.severe('Error type: ${e.runtimeType}');
       if (e.toString().contains('PERMISSION_DENIED')) {
-        print('❌ This is a Firestore permission error');
+        _logger.severe('This is a Firestore permission error');
       }
       state = state.copyWith(
-        isLoading: false,
+        loading: false,
         error: 'Failed to load user data: $e',
       );
     }
@@ -176,7 +212,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // Sign in with email and password
   Future<void> signInWithEmailAndPassword(String email, String password) async {
     try {
-      state = state.copyWith(isLoading: true, error: null);
+      state = state.copyWith(loading: true, error: null);
       
       await _firebaseService.auth.signInWithEmailAndPassword(
         email: email,
@@ -186,7 +222,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // User data will be loaded automatically by auth state listener
     } catch (e) {
       state = state.copyWith(
-        isLoading: false,
+        loading: false,
+        error: _getErrorMessage(e),
+      );
+      rethrow;
+    }
+  }
+
+  // Send password reset email
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      state = state.copyWith(loading: true, error: null);
+      _logger.info('Sending password reset email to: $email');
+      
+      await _firebaseService.auth.sendPasswordResetEmail(email: email);
+      
+      state = state.copyWith(
+        loading: false,
+        error: null,
+      );
+      _logger.info('Password reset email sent successfully');
+    } catch (e) {
+      _logger.severe('Error sending password reset email: $e');
+      state = state.copyWith(
+        loading: false,
         error: _getErrorMessage(e),
       );
       rethrow;
@@ -201,7 +260,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? companyId,
   ) async {
     try {
-      state = state.copyWith(isLoading: true, error: null);
+      state = state.copyWith(loading: true, error: null);
       
       final userCredential = await _firebaseService.auth
           .createUserWithEmailAndPassword(
@@ -226,7 +285,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // User data will be loaded automatically by auth state listener
     } catch (e) {
       state = state.copyWith(
-        isLoading: false,
+        loading: false,
         error: _getErrorMessage(e),
       );
       rethrow;
@@ -236,12 +295,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // Sign out
   Future<void> signOut() async {
     try {
-      state = state.copyWith(isLoading: true, error: null);
+      state = state.copyWith(loading: true, error: null);
       await _firebaseService.auth.signOut();
-      state = const AuthState(isLoading: false);
+      state = const AuthState(user: null, loading: false, error: null);
     } catch (e) {
       state = state.copyWith(
-        isLoading: false,
+        loading: false,
         error: 'Failed to sign out: $e',
       );
     }
@@ -266,7 +325,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   // Get user-friendly error message
   String _getErrorMessage(dynamic error) {
-    if (error is FirebaseAuthException) {
+    if (error is firebase_auth.FirebaseAuthException) {
       switch (error.code) {
         case 'user-not-found':
           return 'No user found with this email address.';
@@ -294,7 +353,7 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 });
 
 // Convenience providers
-final currentUserProvider = Provider<GeoWorkUser?>((ref) {
+final currentUserProvider = Provider<User?>((ref) {
   return ref.watch(authProvider).user;
 });
 
@@ -303,7 +362,7 @@ final isAuthenticatedProvider = Provider<bool>((ref) {
 });
 
 final authLoadingProvider = Provider<bool>((ref) {
-  return ref.watch(authProvider).isLoading;
+  return ref.watch(authProvider).loading;
 });
 
 final authErrorProvider = Provider<String?>((ref) {

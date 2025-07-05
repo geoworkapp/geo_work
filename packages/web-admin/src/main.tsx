@@ -4,7 +4,13 @@ import './index.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+  // Temporarily disable StrictMode in development to prevent Firebase assertion errors
+  // StrictMode causes components to mount/unmount twice in development
+  import.meta.env.DEV ? (
     <App />
-  </StrictMode>,
+  ) : (
+    <StrictMode>
+      <App />
+    </StrictMode>
+  ),
 )

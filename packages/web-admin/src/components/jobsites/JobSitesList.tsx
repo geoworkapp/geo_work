@@ -29,7 +29,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useNavigate } from 'react-router-dom';
-import type { JobSite } from '../../../../shared/types/index';
+import type { JobSite } from '@shared/types';
 
 const JobSitesList: React.FC = () => {
   console.log('JobSitesList rendering');
@@ -103,14 +103,25 @@ const JobSitesList: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '50vh',
+        width: '100%'
+      }}>
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{
+      width: '100%',
+      maxWidth: '1400px',
+      mx: 'auto',
+      p: { xs: 2, sm: 3, md: 4 },
+    }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

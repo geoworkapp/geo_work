@@ -28,7 +28,7 @@ import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { useAuth } from '../../contexts/AuthContext';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import type { JobSite } from '../../../../shared/types/index';
+import type { JobSite } from '@shared/types';
 import { useNavigate } from 'react-router-dom';
 
 // Google Maps styling

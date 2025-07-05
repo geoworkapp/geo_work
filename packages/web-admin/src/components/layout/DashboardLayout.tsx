@@ -25,6 +25,7 @@ import {
   People as PeopleIcon,
   LocationOn as LocationIcon,
   AccessTime as TimeIcon,
+  CalendarMonth as ScheduleIcon,
   Assessment as ReportsIcon,
   Settings as SettingsIcon,
   Business as BusinessIcon,
@@ -33,12 +34,18 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 
+interface DashboardLayoutProps {
+  contentPadding?: any;
+  children?: React.ReactNode;
+}
+
 const drawerWidth = 280;
 
 const navigationItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
   { text: 'Employees', icon: <PeopleIcon />, path: '/employees' },
   { text: 'Job Sites', icon: <LocationIcon />, path: '/jobsites' },
+  { text: 'Schedule', icon: <ScheduleIcon />, path: '/schedule' },
   { text: 'Time Tracking', icon: <TimeIcon />, path: '/time-tracking' },
   { text: 'Reports', icon: <ReportsIcon />, path: '/reports' },
   { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
@@ -50,13 +57,19 @@ const superAdminItems = [
   { text: 'System Health', icon: <SettingsIcon />, path: '/platform/health' },
 ];
 
-const DashboardLayout: React.FC = () => {
+const DashboardLayout: React.FC<DashboardLayoutProps> = ({ 
+  contentPadding = 0,
+  children 
+}) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Pages that need custom padding can override via props
+  const shouldApplyPadding = contentPadding !== 0;
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -241,14 +254,13 @@ const DashboardLayout: React.FC = () => {
   );
 
   return (
-    <Box sx={{ display: 'flex' }}>
-      {/* App Bar */}
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* AppBar */}
       <AppBar
         position="fixed"
         sx={{
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
-          zIndex: (theme) => theme.zIndex.drawer + 1,
         }}
       >
         <Toolbar>
@@ -326,17 +338,34 @@ const DashboardLayout: React.FC = () => {
         </Drawer>
       </Box>
 
-      {/* Main Content */}
+      {/* Main content */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
-          mt: '64px' // Height of AppBar
+          height: '100vh',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          pt: '64px', // AppBar height
         }}
       >
-        <Outlet />
+        <Box
+          sx={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            p: shouldApplyPadding ? contentPadding : 0,
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            minHeight: 0, // Critical for nested flex containers
+          }}
+        >
+          <Outlet />
+          {children}
+        </Box>
       </Box>
     </Box>
   );

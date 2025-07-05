@@ -906,4 +906,288 @@ export interface AuditTrail {
     sessionId?: string;
   };
   timestamp: Date;
-} 
+}
+
+// Schedule Management Types
+export interface Schedule {
+  scheduleId: string;
+  companyId: string;
+  employeeId: string;
+  employeeName: string;
+  jobSiteId: string;
+  jobSiteName: string;
+  startDateTime: Date;
+  endDateTime: Date;
+  shiftType: 'regular' | 'overtime' | 'emergency' | 'training';
+  status: 'scheduled' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled' | 'no-show';
+  notes?: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+  
+  // Recurring schedule options
+  isRecurring: boolean;
+  recurrence?: {
+    type: 'daily' | 'weekly' | 'monthly';
+    interval: number; // every N days/weeks/months
+    daysOfWeek?: number[]; // 0-6 (Sunday-Saturday)
+    endDate?: Date;
+    maxOccurrences?: number;
+  };
+  
+  // Shift details
+  breakDuration: number; // minutes
+  expectedHours: number;
+  minimumHours?: number;
+  maximumHours?: number;
+  
+  // Requirements and preferences
+  skillsRequired?: string[];
+  equipmentNeeded?: string[];
+  specialInstructions?: string;
+  
+  // Approval workflow
+  requiresApproval: boolean;
+  approvedBy?: string;
+  approvedAt?: Date;
+  
+  // Metadata
+  metadata?: {
+    color?: string; // for calendar display
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    department?: string;
+    costCenter?: string;
+    projectCode?: string;
+  };
+}
+
+export interface ScheduleTemplate {
+  templateId: string;
+  companyId: string;
+  templateName: string;
+  description?: string;
+  
+  // Template configuration
+  jobSiteId?: string; // if specific to a job site
+  shiftType: 'regular' | 'overtime' | 'emergency' | 'training';
+  duration: number; // hours
+  breakDuration: number; // minutes
+  
+  // Default timing
+  defaultStartTime: string; // HH:MM format
+  defaultEndTime: string; // HH:MM format
+  
+  // Recurrence settings
+  recurrence: {
+    type: 'daily' | 'weekly' | 'monthly';
+    interval: number;
+    daysOfWeek?: number[];
+  };
+  
+  // Requirements
+  skillsRequired?: string[];
+  equipmentNeeded?: string[];
+  specialInstructions?: string;
+  
+  // Metadata
+  isActive: boolean;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ScheduleConflict {
+  conflictId: string;
+  type: 'overlap' | 'double-booking' | 'insufficient-rest' | 'overtime-limit' | 'availability';
+  employeeId: string;
+  employeeName: string;
+  conflictingSchedules: string[]; // schedule IDs
+  severity: 'warning' | 'error';
+  message: string;
+  suggestions?: string[];
+}
+
+export interface EmployeeAvailability {
+  availabilityId: string;
+  employeeId: string;
+  companyId: string;
+  
+  // Regular availability
+  weeklyAvailability: {
+    [key: number]: { // 0-6 (Sunday-Saturday)
+      available: boolean;
+      startTime?: string; // HH:MM
+      endTime?: string; // HH:MM
+      notes?: string;
+    };
+  };
+  
+  // Time off requests
+  timeOffRequests: {
+    requestId: string;
+    startDate: Date;
+    endDate: Date;
+    type: 'vacation' | 'sick' | 'personal' | 'bereavement' | 'other';
+    status: 'pending' | 'approved' | 'denied';
+    reason?: string;
+    approvedBy?: string;
+    approvedAt?: Date;
+  }[];
+  
+  // Special availability (overrides)
+  specialAvailability: {
+    date: Date;
+    available: boolean;
+    startTime?: string;
+    endTime?: string;
+    reason?: string;
+  }[];
+  
+  // Preferences
+  preferences: {
+    preferredShifts?: ('morning' | 'afternoon' | 'evening' | 'night')[];
+    maxHoursPerWeek?: number;
+    maxConsecutiveDays?: number;
+    minimumRestHours?: number;
+    preferredJobSites?: string[];
+    unavailableJobSites?: string[];
+  };
+  
+  updatedAt: Date;
+}
+
+export interface ScheduleSummary {
+  employeeId: string;
+  employeeName: string;
+  period: 'week' | 'month';
+  startDate: Date;
+  endDate: Date;
+  
+  // Summary statistics
+  totalScheduledHours: number;
+  totalWorkedHours?: number;
+  regularHours: number;
+  overtimeHours: number;
+  totalShifts: number;
+  completedShifts?: number;
+  cancelledShifts?: number;
+  noShowShifts?: number;
+  
+  // By job site
+  jobSiteBreakdown: {
+    jobSiteId: string;
+    jobSiteName: string;
+    scheduledHours: number;
+    workedHours?: number;
+    shifts: number;
+  }[];
+  
+  // By shift type
+  shiftTypeBreakdown: {
+    shiftType: string;
+    scheduledHours: number;
+    workedHours?: number;
+    shifts: number;
+  }[];
+  
+  // Performance metrics
+  attendanceRate?: number; // percentage
+  punctualityScore?: number; // percentage
+  averageHoursPerShift?: number;
+}
+
+export interface ScheduleNotification {
+  notificationId: string;
+  employeeId: string;
+  scheduleId: string;
+  type: 'shift-assigned' | 'shift-updated' | 'shift-cancelled' | 'shift-reminder' | 'schedule-conflict';
+  title: string;
+  message: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  
+  // Timing
+  scheduledFor?: Date; // when to send the notification
+  sentAt?: Date;
+  readAt?: Date;
+  
+  // Actions
+  actions?: {
+    actionId: string;
+    label: string;
+    type: 'confirm' | 'decline' | 'reschedule' | 'view-details';
+    url?: string;
+  }[];
+  
+  // Delivery
+  channels: ('push' | 'email' | 'sms' | 'in-app')[];
+  deliveryStatus: {
+    [channel: string]: 'pending' | 'sent' | 'delivered' | 'failed';
+  };
+  
+  metadata?: {
+    scheduleDetails?: Partial<Schedule>;
+    originalScheduleId?: string; // for updates/cancellations
+  };
+  
+  createdAt: Date;
+  expiresAt?: Date;
+}
+
+// Schedule Query Types
+export interface ScheduleQuery {
+  companyId: string;
+  employeeIds?: string[];
+  jobSiteIds?: string[];
+  startDate?: Date;
+  endDate?: Date;
+  status?: Schedule['status'][];
+  shiftTypes?: Schedule['shiftType'][];
+  includeRecurring?: boolean;
+  
+  // Pagination
+  limit?: number;
+  offset?: number;
+  
+  // Sorting
+  sortBy?: 'startDateTime' | 'createdAt' | 'employeeName' | 'jobSiteName';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface BulkScheduleOperation {
+  operationId: string;
+  companyId: string;
+  type: 'create' | 'update' | 'delete' | 'copy';
+  
+  // Target schedules
+  scheduleIds?: string[]; // for update/delete operations
+  templateId?: string; // for create from template
+  
+  // Bulk data
+  scheduleData?: Partial<Schedule>[];
+  
+  // Options
+  options: {
+    overwriteExisting?: boolean;
+    skipConflicts?: boolean;
+    sendNotifications?: boolean;
+    requireApproval?: boolean;
+    dryRun?: boolean; // preview only
+  };
+  
+  // Results
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'partial';
+  progress?: number; // 0-100
+  
+  results?: {
+    successful: number;
+    failed: number;
+    skipped: number;
+    conflicts: ScheduleConflict[];
+    errors: string[];
+    createdScheduleIds?: string[];
+  };
+  
+  createdBy: string;
+  createdAt: Date;
+  completedAt?: Date;
+}

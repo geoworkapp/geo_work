@@ -14,7 +14,6 @@ import {
   IconButton,
   Chip,
   Dialog,
-  useTheme,
   Stack,
   Alert
 } from '@mui/material';
@@ -47,7 +46,6 @@ const EmployeesList: React.FC = () => {
   console.log('EmployeesList rendering');
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const theme = useTheme();
 
   // State
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -140,14 +138,25 @@ const EmployeesList: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        height: '50vh',
+        width: '100%'
+      }}>
         <Typography>Loading employees...</Typography>
       </Box>
     );
   }
 
   return (
-    <Box>
+    <Box sx={{
+      width: '100%',
+      maxWidth: '1400px',
+      mx: 'auto',
+      p: { xs: 2, sm: 3, md: 4 },
+    }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" gutterBottom>

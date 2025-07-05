@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared/models.dart' as shared;
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/jobsites_provider.dart';
 import '../../providers/time_tracking_provider.dart';
+import '../../utils/logger.dart';
+import '../timesheet/timesheet_screen.dart';
+import '../schedule/schedule_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -16,18 +20,18 @@ class DashboardScreen extends ConsumerWidget {
     final timeTrackingState = ref.watch(timeTrackingProvider);
 
     // Debug logging for time tracking state
-    print('🔧 Dashboard build - Time tracking state:');
-    print('  - Is clocked in: ${timeTrackingState.isClockedIn}');
-    print('  - Current shift: ${timeTrackingState.currentShift?.jobSiteName}');
-    print('  - Processing entry: ${timeTrackingState.isProcessingEntry}');
-    print('  - Can clock out: ${timeTrackingState.canClockOut}');
-    print('  - Today entries: ${timeTrackingState.todayEntries.length}');
+    log.fine('Dashboard build - Time tracking state:');
+    log.fine('  - Is clocked in: ${timeTrackingState.isClockedIn}');
+    log.fine('  - Current shift: ${timeTrackingState.currentShift?.jobSiteName}');
+    log.fine('  - Processing entry: ${timeTrackingState.isProcessingEntry}');
+    log.fine('  - Can clock out: ${timeTrackingState.canClockOut}');
+    log.fine('  - Today entries: ${timeTrackingState.todayEntries.length}');
 
     // Debug logging
-    print('🔧 Dashboard build - Current user: ${currentUser?.uid}');
-    print('🔧 Job sites state - assigned: ${jobSitesState.assignedJobSites.length}, all: ${jobSitesState.jobSites.length}');
-    print('🔧 Job sites loading: ${jobSitesState.isLoading}');
-    print('🔧 Job sites error: ${jobSitesState.error}');
+    log.fine('Dashboard build - Current user: ${currentUser?.id}');
+    log.fine('Job sites state - assigned: ${jobSitesState.assignedJobSites.length}, all: ${jobSitesState.jobSites.length}');
+    log.fine('Job sites loading: ${jobSitesState.isLoading}');
+    log.fine('Job sites error: ${jobSitesState.error}');
 
     return Scaffold(
       appBar: AppBar(
@@ -36,11 +40,11 @@ class DashboardScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () async {
-              print('🔧 Manual refresh triggered');
+              log.fine('Manual refresh triggered');
               await ref.read(locationProvider.notifier).getCurrentLocation();
               await ref.read(jobSitesProvider.notifier).refresh();
               await ref.read(timeTrackingProvider.notifier).refresh();
-              print('🔧 Manual refresh completed');
+              log.fine('Manual refresh completed');
             },
           ),
           IconButton(
@@ -57,7 +61,7 @@ class DashboardScreen extends ConsumerWidget {
             icon: CircleAvatar(
               backgroundColor: Colors.white,
               child: Text(
-                currentUser?.email?.substring(0, 1).toUpperCase() ?? 'U',
+                currentUser?.email.substring(0, 1).toUpperCase() ?? 'U',
                 style: const TextStyle(
                   color: Color(0xFF2196F3),
                   fontWeight: FontWeight.bold,
@@ -187,6 +191,11 @@ class DashboardScreen extends ConsumerWidget {
               
               // Today's Time Entries
               _buildTodayEntriesSection(context, timeTrackingState),
+              
+              const SizedBox(height: 24),
+              
+              // Quick Actions
+              _buildQuickActionsSection(context),
             ],
           ),
         ),
@@ -194,7 +203,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildWelcomeCard(BuildContext context, GeoWorkUser? currentUser) {
+  Widget _buildWelcomeCard(BuildContext context, shared.User? currentUser) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -207,7 +216,7 @@ class DashboardScreen extends ConsumerWidget {
                   radius: 30,
                   backgroundColor: const Color(0xFF2196F3),
                   child: Text(
-                    currentUser?.email?.substring(0, 1).toUpperCase() ?? 'U',
+                    currentUser?.email.substring(0, 1).toUpperCase() ?? 'U',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 24,
@@ -240,16 +249,16 @@ class DashboardScreen extends ConsumerWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: _getRoleColor(currentUser?.role).withOpacity(0.1),
+                          color: _getRoleColorFromString(currentUser?.role).withAlpha((0.1 * 255).round()),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: _getRoleColor(currentUser?.role).withOpacity(0.3),
+                            color: _getRoleColorFromString(currentUser?.role).withAlpha((0.3 * 255).round()),
                           ),
                         ),
                         child: Text(
-                          _getRoleLabel(currentUser?.role),
+                          _getRoleLabelFromString(currentUser?.role),
                           style: TextStyle(
-                            color: _getRoleColor(currentUser?.role),
+                            color: _getRoleColorFromString(currentUser?.role),
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -530,66 +539,204 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   Widget _buildClockOutSection(BuildContext context, WidgetRef ref, TimeTrackingState timeTrackingState) {
+    final currentShift = timeTrackingState.currentShift!;
+    
     return Card(
-      color: Colors.red.shade50,
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              backgroundColor: Colors.red.shade100,
-              child: Icon(Icons.stop_circle, color: Colors.red.shade700),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Ready to clock out?',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
+            Row(
+              children: [
+                Icon(
+                  Icons.work,
+                  color: Theme.of(context).primaryColor,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        currentShift.isOnBreak ? 'On Break' : 'Currently Working',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'At ${currentShift.jobSiteName}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      Text(
+                        'Started at ${_formatTime(currentShift.startTime)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: currentShift.isOnBreak ? Colors.orange : Colors.green,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    currentShift.isOnBreak ? 'ON BREAK' : 'ACTIVE',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Text(
-                    'You are currently clocked in at ${timeTrackingState.currentShift?.jobSiteName}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade600,
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // Action buttons
+            Row(
+              children: [
+                // Break button
+                if (!currentShift.isOnBreak && timeTrackingState.canTakeBreak)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: timeTrackingState.isProcessingEntry
+                          ? null
+                          : () async {
+                              final success = await ref
+                                  .read(timeTrackingProvider.notifier)
+                                  .startBreak();
+                              
+                              if (success && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Break started'),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                              }
+                            },
+                      icon: timeTrackingState.isProcessingEntry
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.coffee),
+                      label: const Text('Start Break'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange,
+                        side: const BorderSide(color: Colors.orange),
+                      ),
+                    ),
+                  )
+                else if (currentShift.isOnBreak && timeTrackingState.canEndBreak)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: timeTrackingState.isProcessingEntry
+                          ? null
+                          : () async {
+                              final success = await ref
+                                  .read(timeTrackingProvider.notifier)
+                                  .endBreak();
+                              
+                              if (success && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Break ended - back to work!'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            },
+                      icon: timeTrackingState.isProcessingEntry
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.work),
+                      label: const Text('End Break'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            ElevatedButton.icon(
-              onPressed: !timeTrackingState.canClockOut
-                  ? null
-                  : () async {
-                      final success = await ref
-                          .read(timeTrackingProvider.notifier)
-                          .clockOut();
-                      
-                      if (success && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Successfully clocked out'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    },
-              icon: timeTrackingState.isProcessingEntry
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.stop_circle),
-              label: const Text('Clock Out'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
+                
+                if (!currentShift.isOnBreak && timeTrackingState.canTakeBreak)
+                  const SizedBox(width: 12),
+                
+                // Clock out button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: !timeTrackingState.canClockOut
+                        ? null
+                        : () async {
+                            // Show confirmation dialog if on break
+                            if (currentShift.isOnBreak) {
+                              final shouldClockOut = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Clock Out on Break?'),
+                                  content: const Text(
+                                    'You are currently on break. Clocking out will automatically end your break. Continue?'
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: const Text('Clock Out'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              
+                              if (shouldClockOut != true) return;
+                            }
+                            
+                            final success = await ref
+                                .read(timeTrackingProvider.notifier)
+                                .clockOut();
+                            
+                            if (success && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Successfully clocked out'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          },
+                    icon: timeTrackingState.isProcessingEntry
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.stop_circle),
+                    label: const Text('Clock Out'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -650,11 +797,27 @@ class DashboardScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Today\'s Activity',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Today\'s Activity',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const TimesheetScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.history),
+              label: const Text('View All'),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         if (timeTrackingState.todayEntries.isEmpty)
@@ -662,21 +825,43 @@ class DashboardScreen extends ConsumerWidget {
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Center(
-                child: Text(
-                  'No time entries today.',
-                  style: Theme.of(context).textTheme.bodyMedium,
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.schedule,
+                      size: 48,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No time entries today.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const TimesheetScreen(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.history),
+                      label: const Text('View Timesheet'),
+                    ),
+                  ],
                 ),
               ),
             ),
           )
         else
-          ...timeTrackingState.todayEntries.map((entry) {
+          ...timeTrackingState.todayEntries.take(3).map((entry) {
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               child: Card(
                 child: ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: _getStatusColor(entry.status).withOpacity(0.2),
+                    backgroundColor: _getStatusColor(entry.status).withAlpha((0.2 * 255).round()),
                     child: Icon(
                       _getStatusIcon(entry.status),
                       color: _getStatusColor(entry.status),
@@ -690,38 +875,80 @@ class DashboardScreen extends ConsumerWidget {
                       Text(_formatTime(entry.timestamp)),
                     ],
                   ),
-                  trailing: Text(
-                    '${entry.distanceFromJobSite.toInt()}m',
-                    style: Theme.of(context).textTheme.bodySmall,
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${entry.distanceFromJobSite.toInt()}m',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: entry.distanceFromJobSite <= 50 
+                              ? Colors.green 
+                              : Colors.orange,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Icon(
+                        Icons.location_on,
+                        size: 12,
+                        color: entry.distanceFromJobSite <= 50 
+                            ? Colors.green 
+                            : Colors.orange,
+                      ),
+                    ],
                   ),
                 ),
               ),
             );
           }).toList(),
+          
+        // Show "View All" button if there are more than 3 entries
+        if (timeTrackingState.todayEntries.length > 3)
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const TimesheetScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.history),
+              label: Text('View All ${timeTrackingState.todayEntries.length} Entries'),
+            ),
+          ),
       ],
     );
   }
 
-  Color _getRoleColor(UserRole? role) {
+
+
+  Color _getRoleColorFromString(String? role) {
     switch (role) {
-      case UserRole.superAdmin:
+      case 'superadmin':
         return Colors.purple;
-      case UserRole.companyAdmin:
+      case 'company_admin':
+      case 'manager':
         return Colors.blue;
-      case UserRole.employee:
+      case 'employee':
         return Colors.green;
       default:
         return Colors.grey;
     }
   }
 
-  String _getRoleLabel(UserRole? role) {
+  String _getRoleLabelFromString(String? role) {
     switch (role) {
-      case UserRole.superAdmin:
+      case 'superadmin':
         return 'Super Admin';
-      case UserRole.companyAdmin:
+      case 'company_admin':
         return 'Company Admin';
-      case UserRole.employee:
+      case 'manager':
+        return 'Manager';
+      case 'employee':
         return 'Employee';
       default:
         return 'User';
@@ -770,4 +997,106 @@ class DashboardScreen extends ConsumerWidget {
   String _formatTime(DateTime dateTime) {
     return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
-} 
+
+  Widget _buildQuickActionsSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Quick Actions',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: Card(
+                child: InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const TimesheetScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 32,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Timesheet',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'View work history',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey.shade600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Card(
+                child: InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const ScheduleScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: 32,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'My Schedule',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'View timetable',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey.shade600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}

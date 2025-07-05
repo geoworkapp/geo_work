@@ -16,7 +16,8 @@ import {
   FormHelperText
 } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { db } from '../../firebase/config';
 import { useNavigate } from 'react-router-dom';
 
@@ -115,35 +116,87 @@ const EmployeeCreation: React.FC = () => {
     setError(null);
 
     try {
-      // Create the user document
-      const userRef = collection(db, 'users');
-      await addDoc(userRef, {
-        email: email.toLowerCase(),
-        firstName,
-        lastName,
-        role,
-        companyId: currentUser.companyId,
-        jobSites: selectedJobSites.map(site => site.siteId),
-        isActive: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      // Step 1: Create Firebase Auth user with temporary password
+      const tempPassword = 'TempPass123!'; // Employee will need to reset password
+      
+      // Note: This creates a user in the admin's auth context
+      // In production, you'd want to use Firebase Admin SDK or Cloud Functions
+      const auth = getAuth();
+      const userCredential = await createUserWithEmailAndPassword(auth, email.toLowerCase(), tempPassword);
+      const newUserId = userCredential.user.uid;
 
-      setSuccess(true);
-      // Reset form
-      setEmail('');
-      setFirstName('');
-      setLastName('');
-      setRole('employee');
-      setSelectedJobSites([]);
+      try {
+        // Step 2: Create user document with Firebase Auth UID as document ID
+        await setDoc(doc(db, 'users', newUserId), {
+          uid: newUserId, // Include UID in the document data for consistency
+          email: email.toLowerCase(),
+          firstName,
+          lastName,
+          role,
+          companyId: currentUser.companyId,
+          isActive: true,
+          profile: {
+            firstName,
+            lastName,
+          },
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
 
-      // Navigate back after success
-      setTimeout(() => {
-        navigate('/employees');
-      }, 2000);
+        // Step 3: Create user assignments for selected job sites
+        const batch = writeBatch(db);
+        
+        selectedJobSites.forEach((jobSite) => {
+          const assignmentRef = doc(collection(db, 'userAssignments'));
+          batch.set(assignmentRef, {
+            userId: newUserId, // Use Firebase Auth UID
+            companyId: currentUser.companyId,
+            jobSiteId: jobSite.siteId,
+            isActive: true,
+            permissions: {
+              canEditTimeEntries: true,
+              canViewReports: false,
+              canManageOtherUsers: false
+            },
+            startDate: serverTimestamp(),
+            createdBy: currentUser.uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        });
+
+        await batch.commit();
+
+        // Step 4: Send password reset email so employee can set their password
+        await sendPasswordResetEmail(auth, email.toLowerCase());
+
+        setSuccess(true);
+        
+        // Reset form
+        setEmail('');
+        setFirstName('');
+        setLastName('');
+        setRole('employee');
+        setSelectedJobSites([]);
+
+        // Navigate back after success
+        setTimeout(() => {
+          navigate('/employees');
+        }, 2000);
+
+      } catch (firestoreError) {
+        // If Firestore operations fail, clean up the Auth user
+        await userCredential.user.delete();
+        throw firestoreError;
+      }
+
     } catch (err) {
       console.error('Error creating employee:', err);
-      setError('Failed to create employee');
+      if (err instanceof Error && err.message.includes('email-already-in-use')) {
+        setError('An account with this email already exists');
+      } else {
+        setError('Failed to create employee: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      }
     } finally {
       setLoading(false);
     }
@@ -184,7 +237,7 @@ const EmployeeCreation: React.FC = () => {
             onChange={(e) => setEmail(e.target.value)}
             required
             fullWidth
-            helperText="Employee will receive an invitation email"
+            helperText="Employee will receive a password reset email to set their password"
           />
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>

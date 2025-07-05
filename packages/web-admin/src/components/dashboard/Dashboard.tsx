@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import {
   Box,
   Card,
@@ -9,15 +9,22 @@ import {
   Chip,
   Paper,
   IconButton,
+  Tabs,
+  Tab,
+  CircularProgress,
 } from '@mui/material';
 import {
   People as PeopleIcon,
   LocationOn as LocationIcon,
   AccessTime as TimeIcon,
   TrendingUp as TrendingUpIcon,
-  MoreVert as MoreVertIcon
+  MoreVert as MoreVertIcon,
+  Visibility as VisibilityIcon,
+
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
+import RealTimeMonitoring from './RealTimeMonitoring';
+// Schedule management is now available at /schedule route
 
 // Dashboard stats interface
 interface DashboardStats {
@@ -156,8 +163,46 @@ const getStatusColor = (status: string) => {
   }
 };
 
+// Error Boundary Component
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Box sx={{ p: 3, textAlign: 'center' }}>
+          <Typography variant="h6" color="error" gutterBottom>
+            Something went wrong loading this component.
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Please try refreshing the page or contact support if the issue persists.
+          </Typography>
+        </Box>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export const Dashboard: React.FC = () => {
   const { currentUser } = useAuth();
+  const [currentTab, setCurrentTab] = React.useState(0);
+  
   console.log('Dashboard rendering', { mockStats, recentActivity });
   console.log('Current user:', currentUser);
 
@@ -168,175 +213,145 @@ export const Dashboard: React.FC = () => {
     return 'Good evening';
   };
 
-  return (
-    <Box>
-      {/* Welcome Header */}
-      <Box mb={4}>
-        <Typography variant="h4" fontWeight="bold" gutterBottom>
-          {getWelcomeMessage()}, {currentUser?.email?.split('@')[0]}! 👋
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
-          Here's what's happening with your team today
-        </Typography>
-      </Box>
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setCurrentTab(newValue);
+  };
 
-      {/* Statistics Cards */}
-      <Box sx={{ 
-        display: 'grid', 
-        gridTemplateColumns: { 
-          xs: 'repeat(1, 1fr)', 
-          sm: 'repeat(2, 1fr)', 
-          md: 'repeat(4, 1fr)' 
-        }, 
-        gap: 3, 
-        mb: 4 
-      }}>
-        <StatsCard
-          title="Total Employees"
-          value={mockStats.totalEmployees}
-          subtitle={`${mockStats.activeEmployees} currently active`}
-          icon={<PeopleIcon />}
-          color="primary"
-          progress={Math.round((mockStats.activeEmployees / mockStats.totalEmployees) * 100)}
-        />
-        
-        <StatsCard
-          title="Job Sites"
-          value={mockStats.totalJobSites}
-          subtitle="Active locations"
-          icon={<LocationIcon />}
-          color="secondary"
-        />
-        
-        <StatsCard
-          title="Hours This Week"
-          value={mockStats.hoursThisWeek}
-          subtitle="Total tracked hours"
-          icon={<TimeIcon />}
-          color="success"
-        />
-        
-        <StatsCard
-          title="Overtime Hours"
-          value={mockStats.overtimeHours}
-          subtitle="This week"
-          icon={<TrendingUpIcon />}
-          color="warning"
-        />
-      </Box>
+  const renderTabContent = () => {
+    switch (currentTab) {
+      case 1:
+        return (
+          <ErrorBoundary>
+            <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>}>
+              <RealTimeMonitoring />
+            </Suspense>
+          </ErrorBoundary>
+        );
 
-      {/* Content Grid */}
-      <Box sx={{ 
-        display: 'grid', 
-        gridTemplateColumns: { xs: '1fr', lg: '2fr 1fr' }, 
-        gap: 3 
-      }}>
-        {/* Recent Activity */}
-        <Box>
-          <Paper sx={{ p: 3 }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-              <Typography variant="h6" fontWeight="bold">
-                Recent Activity
-              </Typography>
-              <IconButton>
-                <MoreVertIcon />
-              </IconButton>
+      default:
+        return (
+          <Box sx={{ 
+            width: '100%',
+            maxWidth: '1400px', // Max width for content readability
+            mx: 'auto', // Center the content
+            p: { xs: 2, sm: 3, md: 4 }, // Responsive padding
+          }}>
+            {/* Welcome Message */}
+            <Typography variant="h4" gutterBottom>
+              {getWelcomeMessage()}, {currentUser?.profile?.firstName || 'User'}
+            </Typography>
+            
+            {/* Stats Grid */}
+            <Box 
+              display="grid" 
+              gridTemplateColumns={{
+                xs: "repeat(1, 1fr)",
+                sm: "repeat(2, 1fr)", 
+                md: "repeat(4, 1fr)"
+              }}
+              gap={3} 
+              my={3}
+            >
+              <StatsCard
+                title="Total Employees"
+                value={mockStats.totalEmployees}
+                icon={<PeopleIcon />}
+                color="primary"
+                subtitle={`${mockStats.activeEmployees} active now`}
+                progress={Math.round((mockStats.activeEmployees / mockStats.totalEmployees) * 100)}
+              />
+              <StatsCard
+                title="Job Sites"
+                value={mockStats.totalJobSites}
+                icon={<LocationIcon />}
+                color="secondary"
+              />
+              <StatsCard
+                title="Hours This Week"
+                value={mockStats.hoursThisWeek}
+                icon={<TimeIcon />}
+                color="success"
+                subtitle={`${mockStats.overtimeHours} overtime hours`}
+              />
+              <StatsCard
+                title="Productivity"
+                value="92%"
+                icon={<TrendingUpIcon />}
+                color="warning"
+                progress={92}
+              />
             </Box>
-            
-            <Box>
-              {recentActivity.map((item, index) => (
-                <Box 
-                  key={item.id}
-                  display="flex" 
-                  alignItems="center" 
-                  py={2}
-                  borderBottom={index < recentActivity.length - 1 ? 1 : 0}
-                  borderColor="divider"
-                >
-                  <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
-                    {item.user.split(' ').map(n => n[0]).join('')}
-                  </Avatar>
-                  <Box flex={1}>
-                    <Typography variant="subtitle2" fontWeight="bold">
-                      {item.user}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {item.action}
-                    </Typography>
-                  </Box>
-                  <Box textAlign="right">
-                    <Chip 
-                      label={item.status.replace('-', ' ')} 
-                      size="small" 
-                      color={getStatusColor(item.status)}
-                      variant="outlined"
-                    />
-                    <Typography variant="caption" display="block" color="text.secondary" mt={0.5}>
-                      {item.time}
-                    </Typography>
-                  </Box>
-                </Box>
-              ))}
-            </Box>
-          </Paper>
-        </Box>
 
-        {/* Quick Actions */}
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" fontWeight="bold" mb={3}>
-            Quick Actions
-          </Typography>
-          
-          <Box display="flex" flexDirection="column" gap={2}>
-            <Card variant="outlined" sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}>
-              <CardContent sx={{ py: 2 }}>
-                <Box display="flex" alignItems="center">
-                  <PeopleIcon color="primary" sx={{ mr: 2 }} />
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight="bold">
-                      Add New Employee
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Invite team members
-                    </Typography>
-                  </Box>
+            {/* Recent Activity */}
+            <Card>
+              <CardContent>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h6">Recent Activity</Typography>
+                  <IconButton>
+                    <MoreVertIcon />
+                  </IconButton>
                 </Box>
-              </CardContent>
-            </Card>
-            
-            <Card variant="outlined" sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}>
-              <CardContent sx={{ py: 2 }}>
-                <Box display="flex" alignItems="center">
-                  <LocationIcon color="secondary" sx={{ mr: 2 }} />
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight="bold">
-                      Create Job Site
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Set up geofences
-                    </Typography>
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
-            
-            <Card variant="outlined" sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}>
-              <CardContent sx={{ py: 2 }}>
-                <Box display="flex" alignItems="center">
-                  <TrendingUpIcon color="success" sx={{ mr: 2 }} />
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight="bold">
-                      Generate Report
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Weekly summary
-                    </Typography>
-                  </Box>
+                <Box>
+                  {recentActivity.map((activity) => (
+                    <Paper
+                      key={activity.id}
+                      sx={{
+                        p: 2,
+                        mb: 2,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <Box>
+                        <Typography variant="subtitle1">{activity.user}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {activity.action}
+                        </Typography>
+                      </Box>
+                      <Box display="flex" alignItems="center" gap={2}>
+                        <Chip
+                          label={activity.status}
+                          color={getStatusColor(activity.status) as any}
+                          size="small"
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {activity.time}
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  ))}
                 </Box>
               </CardContent>
             </Card>
           </Box>
-        </Paper>
+        );
+    }
+  };
+
+  return (
+    <Box sx={{ 
+      width: '100%',
+      maxWidth: '100%',
+      height: '100%'
+    }}>
+      {/* Tab Navigation */}
+      <Box sx={{ 
+        borderBottom: 1, 
+        borderColor: 'divider', 
+        mb: 0,
+        px: 3,
+        backgroundColor: 'background.paper'
+      }}>
+        <Tabs value={currentTab} onChange={handleTabChange}>
+          <Tab label="Overview" />
+          <Tab label="Real-Time Monitoring" icon={<VisibilityIcon />} iconPosition="start" />
+        </Tabs>
+      </Box>
+
+      {/* Tab Content */}
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
+        {renderTabContent()}
       </Box>
     </Box>
   );

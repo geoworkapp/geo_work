@@ -1,87 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:logging/logging.dart';
+import 'package:shared/models.dart';
 import '../firebase/firebase_service.dart';
 import 'auth_provider.dart';
 import 'dart:math' as math;
-
-// Job Site model for mobile app
-class JobSite {
-  final String siteId;
-  final String companyId;
-  final String siteName;
-  final String address;
-  final JobSiteLocation location;
-  final double radius;
-  final bool isActive;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-
-  JobSite({
-    required this.siteId,
-    required this.companyId,
-    required this.siteName,
-    required this.address,
-    required this.location,
-    required this.radius,
-    required this.isActive,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-
-  factory JobSite.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return JobSite(
-      siteId: doc.id,
-      companyId: data['companyId'] ?? '',
-      siteName: data['siteName'] ?? '',
-      address: data['address'] ?? '',
-      location: JobSiteLocation.fromMap(data['location'] ?? {}),
-      radius: (data['radius'] ?? 100).toDouble(),
-      isActive: data['isActive'] ?? true,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'siteId': siteId,
-      'companyId': companyId,
-      'siteName': siteName,
-      'address': address,
-      'location': location.toMap(),
-      'radius': radius,
-      'isActive': isActive,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': Timestamp.fromDate(updatedAt),
-    };
-  }
-}
-
-// Job Site Location model
-class JobSiteLocation {
-  final double latitude;
-  final double longitude;
-
-  JobSiteLocation({
-    required this.latitude,
-    required this.longitude,
-  });
-
-  factory JobSiteLocation.fromMap(Map<String, dynamic> map) {
-    return JobSiteLocation(
-      latitude: (map['latitude'] ?? 0.0).toDouble(),
-      longitude: (map['longitude'] ?? 0.0).toDouble(),
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'latitude': latitude,
-      'longitude': longitude,
-    };
-  }
-}
 
 // Job Sites state
 class JobSitesState {
@@ -123,32 +46,33 @@ class JobSitesNotifier extends StateNotifier<JobSitesState> {
 
   final Ref _ref;
   final FirebaseService _firebaseService = FirebaseService.instance;
+  final _logger = Logger('JobSitesNotifier');
 
   // Initialize job sites loading
   void _initialize() {
     // Listen to auth changes to load job sites when user is ready
     _ref.listen(currentUserProvider, (previous, next) {
-      print('🔄 Auth state changed - Previous: ${previous?.uid}, Next: ${next?.uid}');
-      print('🏢 Previous companyId: ${previous?.companyId}, Next companyId: ${next?.companyId}');
+      _logger.info('Auth state changed - Previous: ${previous?.id}, Next: ${next?.id}');
+      _logger.info('Previous companyId: ${previous?.companyId}, Next companyId: ${next?.companyId}');
       
       if (next?.companyId != null && next?.companyId != previous?.companyId) {
-        print('✅ User with companyId available, loading job sites');
+        _logger.info('User with companyId available, loading job sites');
         loadJobSites();
         loadAssignedJobSites();
       } else if (next?.companyId == null) {
-        print('⚠️ No companyId available');
+        _logger.warning('No companyId available');
       }
     });
 
     // Also try immediate load if user is already available
     final user = _ref.read(currentUserProvider);
-    print('🏗️ JobSitesNotifier initializing - User: ${user?.uid}, Company: ${user?.companyId}');
+    _logger.info('JobSitesNotifier initializing - User: ${user?.id}, Company: ${user?.companyId}');
     if (user?.companyId != null) {
-      print('✅ User already available, loading job sites immediately');
+      _logger.info('User already available, loading job sites immediately');
       loadJobSites();
       loadAssignedJobSites();
     } else {
-      print('⚠️ Cannot initialize immediately - no user or companyId available');
+      _logger.warning('Cannot initialize immediately - no user or companyId available');
     }
   }
 
@@ -156,12 +80,12 @@ class JobSitesNotifier extends StateNotifier<JobSitesState> {
   Future<void> loadJobSites() async {
     final user = _ref.read(currentUserProvider);
     if (user?.companyId == null) {
-      print('❌ Cannot load job sites - no companyId');
+      _logger.warning('Cannot load job sites - no companyId');
       return;
     }
 
     try {
-      print('🔄 Loading job sites for company: ${user!.companyId}');
+      _logger.info('Loading job sites for company: ${user!.companyId}');
       state = state.copyWith(isLoading: true, error: null);
 
       final querySnapshot = await _firebaseService.firestore
@@ -169,13 +93,13 @@ class JobSitesNotifier extends StateNotifier<JobSitesState> {
           .where('companyId', isEqualTo: user.companyId)
           .get();
 
-      print('📊 Found ${querySnapshot.docs.length} job sites');
+      _logger.info('Found ${querySnapshot.docs.length} job sites');
       final jobSites = querySnapshot.docs
-          .map((doc) => JobSite.fromFirestore(doc))
+          .map((doc) => _jobSiteFromFirestore(doc))
           .toList();
 
       for (final jobSite in jobSites) {
-        print('📍 Job site: ${jobSite.siteName} (${jobSite.siteId})');
+        _logger.info('Job site: ${jobSite.siteName} (${jobSite.siteId})');
       }
 
       state = state.copyWith(
@@ -183,7 +107,7 @@ class JobSitesNotifier extends StateNotifier<JobSitesState> {
         isLoading: false,
       );
     } catch (e) {
-      print('❌ Error loading job sites: $e');
+      _logger.severe('Error loading job sites: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load job sites: $e',
@@ -194,92 +118,69 @@ class JobSitesNotifier extends StateNotifier<JobSitesState> {
   // Load job sites assigned to current employee
   Future<void> loadAssignedJobSites() async {
     final user = _ref.read(currentUserProvider);
-    if (user?.uid == null) return;
+    if (user?.id == null) return;
 
     try {
-      print('🔍 Loading assigned job sites for user: ${user!.uid}');
-      print('🏢 User company: ${user.companyId}');
-      
-      // Get user document to find assigned job sites (stored in 'users' collection as 'jobSites')
-      // First try by UID, then by email if not found
-      var userDoc = await _firebaseService.firestore
-          .collection('users')
-          .doc(user.uid)
+      _logger.info('Loading assigned job sites for user: ${user!.id}');
+
+      final assignmentsSnapshot = await _firebaseService.firestore
+          .collection('userAssignments')
+          .where('userId', isEqualTo: user.id)
+          .where('isActive', isEqualTo: true)
           .get();
 
-      print('📋 User doc exists by UID: ${userDoc.exists}');
-      
-      Map<String, dynamic>? userData;
-      
-      if (userDoc.exists) {
-        userData = userDoc.data()!;
-      } else {
-        print('🔍 User doc not found by UID, searching by email: ${user.email}');
-        // Try to find by email
-        if (user.email != null) {
-          final emailQuery = await _firebaseService.firestore
-              .collection('users')
-              .where('email', isEqualTo: user.email!.toLowerCase())
-              .limit(1)
-              .get();
-          
-          if (emailQuery.docs.isNotEmpty) {
-            userData = emailQuery.docs.first.data();
-            print('📧 Found user data by email: $userData');
-          }
-        }
-      }
-      
-      if (userData == null) {
-        print('⚠️ No user record found by UID or email, user might be admin - show all job sites');
-        // If no user record, user might be admin - show all job sites
-        state = state.copyWith(assignedJobSites: state.jobSites);
-        return;
-      }
-      print('👤 User data: $userData');
-      
-      // Check if user is admin/manager - if so, show all job sites
-      final userRole = userData!['role'];
-      if (userRole == 'admin' || userRole == 'manager') {
-        print('🔐 User is admin/manager, showing all job sites');
-        state = state.copyWith(assignedJobSites: state.jobSites);
-        return;
-      }
-      
-      final assignedSiteIds = List<String>.from(userData!['jobSites'] ?? []);
-      print('🎯 Assigned job site IDs: $assignedSiteIds');
+      _logger.info('Found ${assignmentsSnapshot.docs.length} assignments');
 
-      if (assignedSiteIds.isEmpty) {
-        print('⚠️ No job sites assigned to employee');
+      if (assignmentsSnapshot.docs.isEmpty) {
         state = state.copyWith(assignedJobSites: []);
         return;
       }
 
-      // Fetch assigned job sites
-      final assignedSites = <JobSite>[];
-      for (final siteId in assignedSiteIds) {
-        print('🔄 Fetching job site: $siteId');
-        final siteDoc = await _firebaseService.firestore
-            .collection('jobSites')
-            .doc(siteId)
-            .get();
+      final jobSiteIds = assignmentsSnapshot.docs
+          .map((doc) => doc.data()['jobSiteId'] as String)
+          .toList();
 
-        print('📍 Job site $siteId exists: ${siteDoc.exists}');
-        if (siteDoc.exists) {
-          final jobSite = JobSite.fromFirestore(siteDoc);
-          print('✅ Loaded job site: ${jobSite.siteName}');
-          assignedSites.add(jobSite);
-        }
+      _logger.info('Assigned job site IDs: $jobSiteIds');
+
+      final jobSitesSnapshot = await _firebaseService.firestore
+          .collection('jobSites')
+          .where(FieldPath.documentId, whereIn: jobSiteIds)
+          .get();
+
+      _logger.info('Found ${jobSitesSnapshot.docs.length} assigned job sites');
+      final assignedJobSites = jobSitesSnapshot.docs
+          .map((doc) => _jobSiteFromFirestore(doc))
+          .toList();
+
+      for (final jobSite in assignedJobSites) {
+        _logger.info('Assigned job site: ${jobSite.siteName} (${jobSite.siteId})');
       }
 
-      print('📊 Total assigned sites loaded: ${assignedSites.length}');
-      state = state.copyWith(assignedJobSites: assignedSites);
+      state = state.copyWith(assignedJobSites: assignedJobSites);
     } catch (e) {
-      print('❌ Error loading assigned job sites: $e');
-      state = state.copyWith(
-        error: 'Failed to load assigned job sites: $e',
-      );
+      _logger.severe('Error loading assigned job sites: $e');
     }
+  }
+
+  // Convert Firestore document to JobSite using shared model
+  JobSite _jobSiteFromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final locationData = data['location'] as Map<String, dynamic>;
+    
+    return JobSite(
+      siteId: doc.id,
+      companyId: data['companyId'] ?? '',
+      siteName: data['siteName'] ?? '',
+      address: data['address'] ?? '',
+      location: Location(
+        latitude: (locationData['latitude'] ?? 0.0).toDouble(),
+        longitude: (locationData['longitude'] ?? 0.0).toDouble(),
+      ),
+      radius: ((data['radius'] ?? 100) as num).round(),
+      isActive: data['isActive'] ?? true,
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+    );
   }
 
   // Refresh job sites
