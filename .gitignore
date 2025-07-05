@@ -130,4 +130,8 @@ package-lock.json
 
 # Documentation build
 docs/_build/
-site/ 
+site/
+
+# Sensitive credentials (never commit)
+packages/geowork-functions/service-account.json
+packages/**/service-account.json 
