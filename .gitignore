@@ -134,4 +134,4 @@ site/
 
 # Sensitive credentials (never commit)
 packages/geowork-functions/service-account.json
-packages/**/service-account.json 
+packages/**/service-account.json packages/geowork-functions/service-account.json
