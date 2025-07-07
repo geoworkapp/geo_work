@@ -271,3 +271,8 @@ export const rollbackMigration = onCall(async (request) => {
     throw new Error('Rollback failed');
   }
 });
+
+// Geofence breach monitoring trigger
+export { monitorGeofenceBreach } from './geofenceAlert';
+
+export { registerAdminToken } from './registerAdminToken';

@@ -59,7 +59,7 @@ export const LoginForm: React.FC = () => {
     } catch (error: any) {
       if (error.message === 'USER_NEEDS_ONBOARDING') {
         // Redirect to company registration
-        navigate('/register-company');
+        navigate('/register-company', { state: { autoGoogle: true } });
       } else {
         console.error('Google sign-in failed:', error);
       }

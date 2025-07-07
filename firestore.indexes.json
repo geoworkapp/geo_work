@@ -450,6 +450,14 @@
         { "fieldPath": "isActive", "order": "ASCENDING" },
         { "fieldPath": "templateName", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "geofenceAlerts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "lastSeen", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

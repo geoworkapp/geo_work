@@ -8,6 +8,7 @@ import {
   clearIndexedDbPersistence
 } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
+import type { FirebaseApp } from 'firebase/app';
 
 // 🔥 FIREBASE CONFIG - Using environment variables for security
 // Create a .env.local file based on .env.example and fill in your values
@@ -30,7 +31,7 @@ if (missingVars.length > 0) {
 }
 
 // Prevent multiple Firebase app initialization
-let app;
+let app: FirebaseApp;
 if (getApps().length === 0) {
   app = initializeApp(firebaseConfig);
 } else {

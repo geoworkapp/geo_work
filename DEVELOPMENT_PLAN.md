@@ -204,6 +204,19 @@
 4. "Create European compliance documentation and privacy policies"
 ```
 
+### 🔑 FCM Production Checklist (added Jul-2025)
+When moving the geofence-alert notification feature from local emulator to production:
+1. Ensure `registerAdminToken` and `monitorGeofenceBreach` functions are deployed:
+   ```
+   firebase deploy --only functions:registerAdminToken,functions:monitorGeofenceBreach,firestore:indexes
+   ```
+2. Do **not** set `VITE_FUNCTIONS_HOST` in production env; the web-admin code will default to the live HTTPS endpoint.
+3. Keep the public `VITE_VAPID_KEY` and Firebase config values unchanged in `.env.production`.
+4. Service-worker file (`/public/firebase-messaging-sw.js`) must be included in the web-admin build output.
+5. Optional: add a user-gesture "Enable notifications" button to silence Chrome's permission warning.
+
+This ensures company admins receive push notifications for geofence breaches in production without emulator shortcuts.
+
 ---
 
 ## 🎯 **RECOMMENDED IMMEDIATE ACTION PLAN**

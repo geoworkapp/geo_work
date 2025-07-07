@@ -17,7 +17,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -147,6 +147,7 @@ const EmployeeEdit: React.FC = () => {
     setError(null);
 
     try {
+      // 1. Update core user document
       const employeeRef = doc(db, 'users', id);
       await updateDoc(employeeRef, {
         email: email.toLowerCase(),
@@ -158,8 +159,59 @@ const EmployeeEdit: React.FC = () => {
         updatedAt: serverTimestamp()
       });
 
+      // 2. Sync userAssignments so that the mobile app picks up the changes
+      const assignmentsRef = collection(db, 'userAssignments');
+
+      // 2a. Fetch existing active assignments
+      const existingAssignmentsSnap = await getDocs(query(assignmentsRef, where('userId', '==', id)));
+
+      // 2b. Mark assignments to delete or keep
+      const batch = writeBatch(db);
+
+      // Build a Set of selected jobSiteIds for quick lookup
+      const selectedIds = new Set(selectedJobSites.map(s => s.siteId));
+
+      // Remove assignments that are no longer selected
+      existingAssignmentsSnap.docs.forEach((docSnap) => {
+        if (!selectedIds.has(docSnap.data().jobSiteId)) {
+          batch.update(docSnap.ref, { isActive: false, updatedAt: serverTimestamp() });
+        }
+      });
+
+      // 2c. Upsert assignments for newly selected jobSites
+      for (const site of selectedJobSites) {
+        // Check if assignment already exists
+        const match = existingAssignmentsSnap.docs.find(d => d.data().jobSiteId === site.siteId);
+        if (match) {
+          // Reactivate if previously inactive
+          if (match.data().isActive === false) {
+            batch.update(match.ref, { isActive: true, updatedAt: serverTimestamp() });
+          }
+        } else {
+          // Create new assignment
+          const newRef = doc(assignmentsRef);
+          batch.set(newRef, {
+            userId: id,
+            companyId: currentUser!.companyId,
+            jobSiteId: site.siteId,
+            isActive: true,
+            permissions: {
+              canEditTimeEntries: true,
+              canViewReports: false,
+              canManageOtherUsers: false
+            },
+            startDate: serverTimestamp(),
+            createdBy: currentUser!.uid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+
+      await batch.commit();
+
       setSuccess(true);
-      
+
       // Navigate back after success
       setTimeout(() => {
         navigate('/employees');

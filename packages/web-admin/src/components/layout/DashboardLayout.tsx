@@ -33,6 +33,7 @@ import {
   Notifications as NotificationsIcon
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationsContext';
 
 interface DashboardLayoutProps {
   contentPadding?: any;
@@ -63,6 +64,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const { alerts, unread, markAllRead } = useNotifications();
+  const [notifAnchor, setNotifAnchor] = useState<null | HTMLElement>(null);
   
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
@@ -87,6 +90,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
     handleProfileMenuClose();
     await logout();
   };
+
+  const handleNotifClick = (e: React.MouseEvent<HTMLElement>) => {
+    setNotifAnchor(e.currentTarget);
+    markAllRead();
+  };
+  const handleNotifClose = () => setNotifAnchor(null);
 
   const getRoleColor = (role?: string) => {
     switch (role) {
@@ -277,8 +286,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           <Box sx={{ flexGrow: 1 }} />
 
           {/* Notifications */}
-          <IconButton color="inherit">
-            <Badge badgeContent={4} color="error">
+          <IconButton color="inherit" onClick={handleNotifClick}>
+            <Badge badgeContent={unread} color="error">
               <NotificationsIcon />
             </Badge>
           </IconButton>
@@ -301,6 +310,32 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           >
             <MenuItem onClick={() => navigate('/profile')}>Profile</MenuItem>
             <MenuItem onClick={handleLogout}>Logout</MenuItem>
+          </Menu>
+
+          <Menu
+            anchorEl={notifAnchor}
+            open={Boolean(notifAnchor)}
+            onClose={handleNotifClose}
+            sx={{ maxWidth: 360 }}
+          >
+            {alerts.length === 0 && (
+              <MenuItem disabled>No alerts 🎉</MenuItem>
+            )}
+            {alerts.map((alert) => (
+              <MenuItem key={alert.id} onClick={handleNotifClose} sx={{ whiteSpace: 'normal' }}>
+                <ListItemIcon>
+                  <NotificationsIcon color={alert.active ? 'error' : 'disabled'} />
+                </ListItemIcon>
+                <ListItemText
+                  primary={`Emp ${alert.employeeId.substring(0, 6)}…`} 
+                  secondary={
+                    alert.active
+                      ? `Outside geofence ${Math.round(alert.distance)}m`
+                      : 'Resolved'
+                  }
+                />
+              </MenuItem>
+            ))}
           </Menu>
         </Toolbar>
       </AppBar>

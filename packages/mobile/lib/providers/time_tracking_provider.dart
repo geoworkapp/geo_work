@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'dart:async';
 // import 'package:shared/models.dart'; 
 import '../firebase/firebase_service.dart';
 import '../utils/logger.dart';
@@ -28,6 +29,7 @@ class TimeEntry {
   final Position location;
   final double distanceFromJobSite;
   final Map<String, dynamic>? metadata;
+  final bool isHeartbeat;
 
   TimeEntry({
     required this.entryId,
@@ -40,6 +42,7 @@ class TimeEntry {
     required this.location,
     required this.distanceFromJobSite,
     this.metadata,
+    this.isHeartbeat = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -92,6 +95,7 @@ class TimeTrackingState {
   final bool isLoading;
   final String? error;
   final bool isProcessingEntry;
+  final bool outsideGeofenceWarning;
 
   const TimeTrackingState({
     this.currentShift,
@@ -100,6 +104,7 @@ class TimeTrackingState {
     this.isLoading = false,
     this.error,
     this.isProcessingEntry = false,
+    this.outsideGeofenceWarning = false,
   });
 
   TimeTrackingState copyWith({
@@ -109,6 +114,7 @@ class TimeTrackingState {
     bool? isLoading,
     String? error,
     bool? isProcessingEntry,
+    bool? outsideGeofenceWarning,
   }) {
     return TimeTrackingState(
       currentShift: currentShift ?? this.currentShift,
@@ -117,6 +123,7 @@ class TimeTrackingState {
       isLoading: isLoading ?? this.isLoading,
       error: error,
       isProcessingEntry: isProcessingEntry ?? this.isProcessingEntry,
+      outsideGeofenceWarning: outsideGeofenceWarning ?? this.outsideGeofenceWarning,
     );
   }
 
@@ -134,6 +141,9 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
 
   final Ref _ref;
   final FirebaseService _firebaseService = FirebaseService.instance;
+  Timer? _heartbeatTimer; // Periodic heartbeat timer
+  static const Duration _heartbeatInterval = Duration(seconds: 10);
+  bool get _isHeartbeatActive => _heartbeatTimer?.isActive ?? false;
 
   // Initialize time tracking
   void _initialize() {
@@ -166,12 +176,16 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
 
       final entries = querySnapshot.docs
           .map((doc) => _timeEntryFromFirestore(doc))
+          .where((e) => !e.isHeartbeat)
           .toList();
 
       state = state.copyWith(
         todayEntries: entries,
         isLoading: false,
       );
+
+      // Now that today's entries are loaded, refresh current shift status
+      await loadCurrentShift();
     } catch (e) {
       // Log error - removed AppLogger import
       state = state.copyWith(
@@ -209,6 +223,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
       ),
       distanceFromJobSite: (data['distanceFromJobSite'] ?? 0.0).toDouble(),
       metadata: data['metadata'],
+      isHeartbeat: (data['metadata']?['heartbeat'] ?? false) as bool,
     );
   }
 
@@ -232,6 +247,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     final entries = state.todayEntries;
     if (entries.isEmpty) {
       state = state.copyWith(currentShift: null);
+      _stopHeartbeat();
       return;
     }
 
@@ -241,6 +257,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     // If the most recent entry is a clock-out, user is not currently clocked in
     if (latestEntry.status == TimeEntryStatus.clockedOut) {
       state = state.copyWith(currentShift: null);
+      _stopHeartbeat();
       return;
     }
 
@@ -256,6 +273,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     // If no clock-in found, no active shift
     if (lastClockIn == null) {
       state = state.copyWith(currentShift: null);
+      _stopHeartbeat();
       return;
     }
 
@@ -271,6 +289,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
 
     if (hasClockOutAfter) {
       state = state.copyWith(currentShift: null);
+      _stopHeartbeat();
       return;
     }
 
@@ -294,6 +313,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     );
 
     state = state.copyWith(currentShift: currentShift);
+    _startHeartbeat();
   }
 
   // Clock in at a job site
@@ -341,6 +361,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
           'accuracy': position.accuracy,
           'clockInType': 'manual',
         },
+        isHeartbeat: false,
       );
 
       // Save to Firestore
@@ -367,6 +388,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
         todayEntries: updatedEntries,
         isProcessingEntry: false,
       );
+      _startHeartbeat();
 
       return true;
     } catch (e) {
@@ -431,6 +453,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
           'accuracy': position.accuracy,
           'clockOutType': 'manual',
         },
+        isHeartbeat: false,
       );
 
       log.info('Saving clock out entry to Firestore');
@@ -450,6 +473,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
         isProcessingEntry: false,
         recentEntries: state.recentEntries,
       );
+      _stopHeartbeat();
 
       log.info('Clock out complete - New state: isClockedIn=${state.isClockedIn}');
       return true;
@@ -504,6 +528,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
           'accuracy': position.accuracy,
           'clockInType': 'manual',
         },
+        isHeartbeat: false,
       );
 
       // Save to Firestore
@@ -581,6 +606,7 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
           'accuracy': position.accuracy,
           'clockOutType': 'manual',
         },
+        isHeartbeat: false,
       );
 
       // Save to Firestore
@@ -731,6 +757,83 @@ class TimeTrackingNotifier extends StateNotifier<TimeTrackingState> {
     } catch (e) {
       throw Exception('Failed to load entries for date range: $e');
     }
+  }
+
+  // Start heartbeat timer if not already running
+  void _startHeartbeat() {
+    if (state.isClockedIn && !_isHeartbeatActive) {
+      _heartbeatTimer = Timer.periodic(_heartbeatInterval, (_) => _sendHeartbeat());
+    }
+  }
+
+  // Stop and dispose heartbeat timer
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  // Send periodic heartbeat entry to Firestore
+  Future<void> _sendHeartbeat() async {
+    final shift = state.currentShift;
+    final user = _ref.read(currentUserProvider);
+
+    // If shift ended while timer was waiting, stop further heartbeats
+    if (shift == null || user == null) {
+      _stopHeartbeat();
+      return;
+    }
+
+    final position = await _ref.read(locationProvider.notifier).getCurrentLocation();
+    if (position == null) return; // Could not fetch location
+
+    // Get job site details for geofence distance calculation
+    final jobSite = _ref.read(jobSitesProvider.notifier).getAssignedJobSiteById(shift.jobSiteId);
+    double distance = 0;
+    bool outsideGeofence = false;
+    if (jobSite != null) {
+      distance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        jobSite.location.latitude,
+        jobSite.location.longitude,
+      );
+      outsideGeofence = distance > jobSite.radius;
+    }
+
+    // Build heartbeat time entry (status mirrors current status)
+    final heartbeatEntry = TimeEntry(
+      entryId: '',
+      employeeId: user.id,
+      companyId: user.companyId!,
+      jobSiteId: shift.jobSiteId,
+      jobSiteName: shift.jobSiteName,
+      status: shift.currentStatus,
+      timestamp: DateTime.now(),
+      location: position,
+      distanceFromJobSite: distance,
+      metadata: {
+        'accuracy': position.accuracy,
+        'heartbeat': true,
+        'outsideGeofence': outsideGeofence,
+      },
+      isHeartbeat: false,
+    );
+
+    try {
+      await _firebaseService.firestore.collection('timeEntries').add(heartbeatEntry.toMap());
+
+      // Optionally add to in-memory list so UI updates immediately
+      state = state.copyWith(outsideGeofenceWarning: outsideGeofence);
+    } catch (e) {
+      // Do not surface heartbeat errors to UI; just log
+      log.warning('Failed to save heartbeat: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopHeartbeat();
+    super.dispose();
   }
 }
 

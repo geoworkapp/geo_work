@@ -13,5 +13,8 @@
   "compileOnSave": true,
   "include": [
     "src"
+  ],
+  "exclude": [
+    "src/fix-user-ids.ts"
   ]
 }

@@ -33,6 +33,18 @@ class DashboardScreen extends ConsumerWidget {
     log.fine('Job sites loading: ${jobSitesState.isLoading}');
     log.fine('Job sites error: ${jobSitesState.error}');
 
+    ref.listen<TimeTrackingState>(timeTrackingProvider, (previous, next) {
+      if (next.outsideGeofenceWarning && !(previous?.outsideGeofenceWarning ?? false)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You are outside the job-site geofence. Please return or clock out.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('GeoWork Dashboard'),
@@ -923,8 +935,6 @@ class DashboardScreen extends ConsumerWidget {
       ],
     );
   }
-
-
 
   Color _getRoleColorFromString(String? role) {
     switch (role) {

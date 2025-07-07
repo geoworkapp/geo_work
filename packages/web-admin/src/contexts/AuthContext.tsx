@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
+import { enablePushNotifications } from '../firebase/messaging';
 
 // User role types
 export type UserRole = 'super_admin' | 'company_admin' | 'manager' | 'employee';
@@ -190,7 +191,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         // New user - needs company setup
         setError('Please complete company registration to continue');
-        await signOut(auth);
+        // Keep the user signed in so onboarding can proceed with the same session
         throw new Error('USER_NEEDS_ONBOARDING');
       }
     } catch (err: any) {
@@ -207,13 +208,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const registerCompanyWithGoogle = async (companyData: CompanyRegistrationData): Promise<void> => {
     try {
       setError(null);
-      const result = await signInWithPopup(auth, googleProvider);
-      
+
+      // Re-use the currently authenticated Google user if available to avoid an
+      // unnecessary second popup. Fallback to a fresh popup only if no user is
+      // signed in (e.g., direct navigation to the page).
+      let firebaseUser = auth.currentUser;
+
+      if (!firebaseUser) {
+        const popupResult = await signInWithPopup(auth, googleProvider);
+        firebaseUser = popupResult.user;
+      }
+
+      if (!firebaseUser) {
+        throw new Error('Unable to authenticate with Google');
+      }
+
       // Create company first
-      const companyId = await createCompanyDocument(companyData, result.user.uid);
+      const companyId = await createCompanyDocument(companyData, firebaseUser.uid);
       
       // Create user document
-      const userData = await createUserDocument(result.user, {
+      const userData = await createUserDocument(firebaseUser, {
         role: 'company_admin',
         companyId,
         companyName: companyData.companyName,
@@ -225,7 +239,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       setCurrentUser({
-        ...result.user,
+        ...firebaseUser,
         role: 'company_admin',
         companyId,
         companyName: companyData.companyName,
@@ -353,97 +367,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Auth state listener
+  // Observe auth state changes
   useEffect(() => {
-    let isMounted = true;
-    
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      // Early return if component is unmounted
-      if (!isMounted) return;
-      
-      try {
-        if (user) {
-          try {
-            // Use a simple get operation instead of real-time listener
-            const userDocRef = doc(db, 'users', user.uid);
-            const userDoc = await getDoc(userDocRef);
-            
-            // Check if component is still mounted before setting state
-            if (!isMounted) return;
-            
-            if (userDoc.exists()) {
-              const userData = userDoc.data();
-              setCurrentUser({
-                ...user,
-                role: userData.role,
-                companyId: userData.companyId,
-                companyName: userData.companyName,
-                profile: userData.profile
-              });
-            } else {
-              // User document doesn't exist, create basic one
-              const userData = {
-                uid: user.uid,
-                email: user.email,
-                role: 'company_admin' as UserRole,
-                companyId: null,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                isActive: true
-              };
-              
-              try {
-                await setDoc(userDocRef, userData);
-                if (isMounted) {
-                  setCurrentUser({
-                    ...user,
-                    role: 'company_admin'
-                  });
-                }
-              } catch (setDocError) {
-                console.error('Error creating user document:', setDocError);
-                if (isMounted) {
-                  setCurrentUser({
-                    ...user,
-                    role: 'company_admin'
-                  });
-                }
-              }
-            }
-          } catch (firestoreError: any) {
-            console.error('Firestore error, using basic user data:', firestoreError);
-            // If Firestore fails, still set user with basic data
-            if (isMounted) {
-              setCurrentUser({
-                ...user,
-                role: 'company_admin'
-              });
-            }
-          }
-        } else {
-          if (isMounted) {
-            setCurrentUser(null);
+      if (user) {
+        // Fetch user data from Firestore
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          const enrichedUser = {
+            ...user,
+            role: userData.role,
+            companyId: userData.companyId,
+            companyName: userData.companyName,
+            profile: userData.profile,
+          } as GeoWorkUser;
+          setCurrentUser(enrichedUser);
+
+          // 👉 Register for FCM if admin & companyId present
+          if (enrichedUser.role === 'company_admin' && enrichedUser.companyId) {
+            enablePushNotifications({ companyId: enrichedUser.companyId });
           }
         }
-      } catch (error) {
-        console.error('Auth state change error:', error);
-        if (isMounted) {
-          setCurrentUser(null);
-        }
-      } finally {
-        // Always set loading to false if component is still mounted
-        if (isMounted) {
-          setLoading(false);
-        }
+      } else {
+        setCurrentUser(null);
       }
+      setLoading(false);
     });
 
-    // Cleanup function
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, []); // Empty dependency array - only run once
+    return () => unsubscribe();
+  }, []);
 
   const value: AuthContextType = {
     currentUser,

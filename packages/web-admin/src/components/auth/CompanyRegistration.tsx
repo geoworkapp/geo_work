@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   CardContent,
@@ -35,7 +35,7 @@ import {
   CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 import { useAuth, type CompanyRegistrationData } from '../../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 type RegistrationType = 'google' | 'email' | null;
 
@@ -100,8 +100,28 @@ export const CompanyRegistration: React.FC = () => {
     country: 'GB'
   });
 
-  const { registerCompanyWithGoogle, registerCompanyWithEmail, error, clearError } = useAuth();
+  const { currentUser, registerCompanyWithGoogle, registerCompanyWithEmail, error, clearError } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Auto-configure Google onboarding when redirected from login
+  useEffect(() => {
+    const autoGoogle = (location.state as any)?.autoGoogle;
+    if (autoGoogle) {
+      setRegistrationType('google');
+      setActiveStep(1);
+
+      // Pre-fill form with any available Google profile info
+      setFormData((prev) => ({
+        ...prev,
+        adminEmail: currentUser?.email || prev.adminEmail,
+        adminFirstName: prev.adminFirstName || (currentUser?.displayName?.split(' ')[0] ?? ''),
+        adminLastName:
+          prev.adminLastName ||
+          (currentUser?.displayName ? currentUser.displayName.split(' ').slice(1).join(' ') : ''),
+      }));
+    }
+  }, [location.state, currentUser]);
 
   const handleInputChange = (field: keyof typeof formData) => (
     event: React.ChangeEvent<HTMLInputElement>
@@ -173,7 +193,7 @@ export const CompanyRegistration: React.FC = () => {
         return registrationType !== null;
       case 1:
         const basicValid = formData.companyName && formData.adminFirstName && 
-                          formData.adminLastName && formData.adminEmail;
+                          formData.adminLastName && (registrationType === 'email' ? formData.adminEmail : true);
         if (registrationType === 'email') {
           return basicValid && formData.adminPassword && 
                  formData.confirmPassword && 
@@ -472,7 +492,7 @@ export const CompanyRegistration: React.FC = () => {
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          background: 'linear-gradient(135deg, #667eea 0%,rgb(255, 255, 255) 100%)',
+          background: 'color(srgb 0.98 0.98 0.98)',
           py: 4
         }}
       >

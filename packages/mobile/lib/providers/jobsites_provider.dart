@@ -123,34 +123,56 @@ class JobSitesNotifier extends StateNotifier<JobSitesState> {
     try {
       _logger.info('Loading assigned job sites for user: ${user!.id}');
 
+      // First query using current field name
       final assignmentsSnapshot = await _firebaseService.firestore
           .collection('userAssignments')
           .where('userId', isEqualTo: user.id)
           .where('isActive', isEqualTo: true)
           .get();
 
-      _logger.info('Found ${assignmentsSnapshot.docs.length} assignments');
+      // Fallback query for legacy field name (employeeId) – avoids OR limitation
+      final legacySnapshot = await _firebaseService.firestore
+          .collection('userAssignments')
+          .where('employeeId', isEqualTo: user.id)
+          .where('isActive', isEqualTo: true)
+          .get();
 
-      if (assignmentsSnapshot.docs.isEmpty) {
+      _logger.info('Found ${assignmentsSnapshot.docs.length} assignments (userId) & ${legacySnapshot.docs.length} legacy assignments (employeeId)');
+
+      final allAssignmentDocs = [...assignmentsSnapshot.docs, ...legacySnapshot.docs];
+
+      if (allAssignmentDocs.isEmpty) {
         state = state.copyWith(assignedJobSites: []);
         return;
       }
 
-      final jobSiteIds = assignmentsSnapshot.docs
+      final jobSiteIds = allAssignmentDocs
           .map((doc) => doc.data()['jobSiteId'] as String)
+          .toSet()
           .toList();
 
       _logger.info('Assigned job site IDs: $jobSiteIds');
 
-      final jobSitesSnapshot = await _firebaseService.firestore
-          .collection('jobSites')
-          .where(FieldPath.documentId, whereIn: jobSiteIds)
-          .get();
+      // Firestore whereIn supports max 10 elements – split into chunks if needed
+      List<JobSite> assignedJobSites = [];
+      for (var i = 0; i < jobSiteIds.length; i += 10) {
+        final chunk = jobSiteIds.sublist(i, math.min(i + 10, jobSiteIds.length));
 
-      _logger.info('Found ${jobSitesSnapshot.docs.length} assigned job sites');
-      final assignedJobSites = jobSitesSnapshot.docs
-          .map((doc) => _jobSiteFromFirestore(doc))
-          .toList();
+        _logger.info('Fetching jobSites batch: ${chunk.length} IDs');
+
+        final snapshot = await _firebaseService.firestore
+            .collection('jobSites')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+
+        _logger.info('Batch returned ${snapshot.docs.length} docs');
+
+        assignedJobSites.addAll(
+          snapshot.docs.map((doc) => _jobSiteFromFirestore(doc)),
+        );
+      }
+
+      _logger.info('Total assigned job sites after batching: ${assignedJobSites.length}');
 
       for (final jobSite in assignedJobSites) {
         _logger.info('Assigned job site: ${jobSite.siteName} (${jobSite.siteId})');

@@ -6,6 +6,7 @@ import {
   Typography,
   List,
   ListItem,
+  ListItemButton,
   ListItemAvatar,
   ListItemText,
   Avatar,
@@ -16,7 +17,8 @@ import {
   Tooltip,
   CircularProgress,
   Divider,
-  Stack,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Work as WorkIcon,
@@ -31,6 +33,7 @@ import {
 import { collection, query, orderBy, limit, onSnapshot, where } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../contexts/AuthContext';
+import EmployeesMap from './EmployeesMap';
 
 interface TimeEntry {
   id: string;
@@ -56,7 +59,7 @@ interface EmployeeStatus {
   currentJobSite?: string;
   lastActivity: Date;
   shiftDuration?: number;
-  location?: string;
+  location?: { latitude: number; longitude: number };
 }
 
 interface LiveStats {
@@ -71,6 +74,7 @@ const RealTimeMonitoring: React.FC = () => {
   const { currentUser } = useAuth();
   const [recentEntries, setRecentEntries] = useState<TimeEntry[]>([]);
   const [employeeStatuses, setEmployeeStatuses] = useState<EmployeeStatus[]>([]);
+  const [userMap, setUserMap] = useState<Record<string, string>>({});
   const [liveStats, setLiveStats] = useState<LiveStats>({
     totalActive: 0,
     totalOnBreak: 0,
@@ -81,9 +85,25 @@ const RealTimeMonitoring: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [liveOnly, setLiveOnly] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentUser?.companyId) return;
+
+    // Listen for users to build id -> name map
+    const usersQ = query(collection(db, 'users'), where('companyId', '==', currentUser.companyId));
+    const unsubUsers = onSnapshot(usersQ, snap => {
+      const map: Record<string, string> = {};
+      snap.forEach(doc => {
+        const d = doc.data();
+        const name = d.profile?.firstName || d.profile?.lastName
+          ? `${d.profile?.firstName ?? ''} ${d.profile?.lastName ?? ''}`.trim()
+          : d.displayName || d.email || doc.id;
+        map[doc.id] = name;
+      });
+      setUserMap(map);
+    });
 
     setLoading(true);
     
@@ -91,6 +111,7 @@ const RealTimeMonitoring: React.FC = () => {
     const entriesQuery = query(
       collection(db, 'timeEntries'),
       where('companyId', '==', currentUser.companyId),
+      orderBy('employeeId'),
       orderBy('timestamp', 'desc'),
       limit(20)
     );
@@ -101,6 +122,7 @@ const RealTimeMonitoring: React.FC = () => {
         const entries: TimeEntry[] = [];
         snapshot.forEach((doc) => {
           const data = doc.data();
+          if (data?.metadata?.heartbeat) return; // skip heartbeat
           entries.push({
             id: doc.id,
             employeeId: data.employeeId,
@@ -130,6 +152,7 @@ const RealTimeMonitoring: React.FC = () => {
     );
 
     return () => {
+      unsubUsers();
       unsubscribeEntries();
     };
   }, [currentUser?.companyId]);
@@ -157,6 +180,7 @@ const RealTimeMonitoring: React.FC = () => {
           currentJobSite: status !== 'clockedOut' ? entry.jobSiteName : undefined,
           lastActivity: entry.timestamp,
           shiftDuration: status !== 'clockedOut' ? calculateShiftDuration(entry.employeeId, entries) : undefined,
+          location: entry.location,
         });
       }
     });
@@ -274,6 +298,22 @@ const RealTimeMonitoring: React.FC = () => {
     // The real-time listener will automatically refresh data
   };
 
+  const baseStatuses = liveOnly
+    ? employeeStatuses.filter(e => e.status !== 'clockedOut')
+    : employeeStatuses;
+
+  const visibleStatuses = selectedEmployeeId
+    ? baseStatuses.filter(e => e.employeeId === selectedEmployeeId)
+    : baseStatuses;
+
+  const activeMarkers = visibleStatuses
+    .filter(e => e.location && e.status === 'active')
+    .map(e => ({
+      id: e.employeeId,
+      name: userMap[e.employeeId] || e.employeeName,
+      location: e.location as any
+    }));
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -366,51 +406,38 @@ const RealTimeMonitoring: React.FC = () => {
         {/* Employee Status */}
         <Card>
           <CardContent>
-            <Typography variant="h6" component="h2" gutterBottom>
-              Employee Status
-            </Typography>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+              <Typography variant="h6">
+                {selectedEmployeeId ? `Real-Time – ${userMap[selectedEmployeeId] || selectedEmployeeId}` : 'Employee Status'}
+              </Typography>
+              {selectedEmployeeId && (
+                <Chip label="Back to all" size="small" onClick={() => setSelectedEmployeeId(null)} />
+              )}
+              <FormControlLabel
+                control={<Switch size="small" checked={liveOnly} onChange={e => setLiveOnly(e.target.checked)} />}
+                label="Live only"
+              />
+            </Box>
             
-            {employeeStatuses.length === 0 ? (
+            {visibleStatuses.length === 0 ? (
               <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
                 No employee activity today
               </Typography>
             ) : (
               <List>
-                {employeeStatuses.map((employee, index) => (
+                {visibleStatuses.map((employee, index) => (
                   <React.Fragment key={employee.employeeId}>
-                    <ListItem>
-                      <ListItemAvatar>
-                        <Avatar 
-                          sx={{ 
-                            bgcolor: employee.status === 'active' ? 'success.main' : 
-                                    employee.status === 'onBreak' ? 'warning.main' : 'error.main'
-                          }}
-                        >
-                          {getStatusIcon(employee.status)}
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={employee.employeeName}
-                        secondary={
-                          <Stack spacing={0.5}>
-                            <Typography variant="body2">
-                              {employee.status === 'active' ? 'Working' : 
-                               employee.status === 'onBreak' ? 'On Break' : 'Clocked Out'}
-                              {employee.currentJobSite && ` at ${employee.currentJobSite}`}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Last activity: {formatTime(employee.lastActivity)}
-                            </Typography>
-                            {employee.shiftDuration && (
-                              <Typography variant="caption" color="text.secondary">
-                                Shift duration: {formatDuration(employee.shiftDuration)}
-                              </Typography>
-                            )}
-                          </Stack>
-                        }
-                      />
+                    <ListItem disablePadding>
+                      <ListItemButton onClick={() => setSelectedEmployeeId(employee.employeeId)}>
+                        <ListItemAvatar>
+                          <Avatar sx={{ bgcolor: employee.status === 'active' ? 'success.main' : employee.status === 'onBreak' ? 'warning.main' : 'error.main' }}>
+                            {getStatusIcon(employee.status)}
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText disableTypography primary={<Typography variant="subtitle2" fontWeight={500}>{userMap[employee.employeeId] || employee.employeeName}</Typography>} secondary={<Box><Typography variant="body2" sx={{ display: 'block' }}>{employee.status === 'active' ? 'Working' : employee.status === 'onBreak' ? 'On Break' : 'Clocked Out'}{employee.currentJobSite && ` at ${employee.currentJobSite}`}</Typography><Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Last activity: {formatTime(employee.lastActivity)}</Typography>{employee.shiftDuration && (<Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Shift duration: {formatDuration(employee.shiftDuration)}</Typography>)}</Box>} />
+                      </ListItemButton>
                     </ListItem>
-                    {index < employeeStatuses.length - 1 && <Divider />}
+                    {index < visibleStatuses.length - 1 && <Divider />}
                   </React.Fragment>
                 ))}
               </List>
@@ -431,7 +458,10 @@ const RealTimeMonitoring: React.FC = () => {
               </Typography>
             ) : (
               <List>
-                {recentEntries.slice(0, 10).map((entry, index) => (
+                {recentEntries
+                  .filter(e => !selectedEmployeeId || e.employeeId === selectedEmployeeId)
+                  .slice(0, 10)
+                  .map((entry, index, arr) => (
                   <React.Fragment key={entry.id}>
                     <ListItem>
                       <ListItemAvatar>
@@ -440,10 +470,11 @@ const RealTimeMonitoring: React.FC = () => {
                         </Avatar>
                       </ListItemAvatar>
                       <ListItemText
+                        disableTypography
                         primary={
                           <Box display="flex" alignItems="center" gap={1}>
                             <Typography variant="body2">
-                              {entry.metadata?.employeeName || `Employee ${entry.employeeId.slice(-4)}`}
+                              {entry.metadata?.employeeName || userMap[entry.employeeId] || `Employee ${entry.employeeId.slice(-4)}`}
                             </Typography>
                             <Chip
                               label={entry.status === 'clockedIn' ? 'Clocked In' :
@@ -456,26 +487,36 @@ const RealTimeMonitoring: React.FC = () => {
                           </Box>
                         }
                         secondary={
-                          <Stack spacing={0.5}>
-                            <Typography variant="caption">
+                          <Box>
+                            <Typography variant="caption" sx={{ display: 'block' }}>
                               <LocationIcon sx={{ fontSize: 12, mr: 0.5 }} />
                               {entry.jobSiteName} ({entry.distanceFromJobSite.toFixed(0)}m away)
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                               <TimeIcon sx={{ fontSize: 12, mr: 0.5 }} />
                               {formatTime(entry.timestamp)}
                             </Typography>
-                          </Stack>
+                          </Box>
                         }
                       />
                     </ListItem>
-                    {index < Math.min(recentEntries.length - 1, 9) && <Divider />}
+                    {index < arr.length - 1 && <Divider />}
                   </React.Fragment>
                 ))}
               </List>
             )}
           </CardContent>
         </Card>
+
+        {/* Map of active employees */}
+        {activeMarkers.length > 0 && (
+          <Card>
+            <CardContent>
+              <Typography variant="h6" mb={2}>Active Employees Map</Typography>
+              <EmployeesMap employees={activeMarkers} />
+            </CardContent>
+          </Card>
+        )}
       </Box>
     </Box>
   );
