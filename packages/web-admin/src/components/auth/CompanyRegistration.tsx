@@ -115,10 +115,10 @@ export const CompanyRegistration: React.FC = () => {
       setFormData((prev) => ({
         ...prev,
         adminEmail: currentUser?.email || prev.adminEmail,
-        adminFirstName: prev.adminFirstName || (currentUser?.displayName?.split(' ')[0] ?? ''),
+        adminFirstName: prev.adminFirstName || (currentUser?.profile?.firstName ?? ''),
         adminLastName:
           prev.adminLastName ||
-          (currentUser?.displayName ? currentUser.displayName.split(' ').slice(1).join(' ') : ''),
+                      (currentUser?.profile?.lastName ?? ''),
       }));
     }
   }, [location.state, currentUser]);

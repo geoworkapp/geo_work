@@ -276,3 +276,11 @@ export const rollbackMigration = onCall(async (request) => {
 export { monitorGeofenceBreach } from './geofenceAlert';
 
 export { registerAdminToken } from './registerAdminToken';
+
+// Schedule orchestrator system for automatic time tracking
+export { 
+  scheduleOrchestrator,
+  processScheduleStarts,
+  processActiveScheduleSessions,
+  processScheduleEnds
+} from './scheduleOrchestrator';

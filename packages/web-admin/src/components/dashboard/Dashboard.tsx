@@ -22,7 +22,7 @@ import {
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import RealTimeMonitoring from './RealTimeMonitoring';
+import UnifiedScheduleDashboard from './UnifiedScheduleDashboard';
 import { collection, query, where, onSnapshot, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 // Schedule management is now available at /schedule route
@@ -190,7 +190,7 @@ export const Dashboard: React.FC = () => {
         const data = doc.data();
         const name = data.profile?.firstName || data.profile?.lastName
           ? `${data.profile?.firstName ?? ''} ${data.profile?.lastName ?? ''}`.trim()
-          : data.displayName || data.email || doc.id;
+                          : data.profile?.firstName || data.email || doc.id;
         map[doc.id] = name;
       });
       setUserMap(map);
@@ -317,7 +317,7 @@ export const Dashboard: React.FC = () => {
     if (currentUser?.profile?.firstName || currentUser?.profile?.lastName) {
       return `${currentUser.profile?.firstName ?? ''} ${currentUser.profile?.lastName ?? ''}`.trim();
     }
-    if (currentUser?.displayName) return currentUser.displayName;
+    if (currentUser?.profile?.firstName) return `${currentUser.profile.firstName} ${currentUser.profile.lastName || ''}`.trim();
     if (currentUser?.email) return currentUser.email.split('@')[0];
     return 'User';
   };
@@ -332,7 +332,7 @@ export const Dashboard: React.FC = () => {
         return (
           <ErrorBoundary>
             <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>}>
-              <RealTimeMonitoring />
+              <UnifiedScheduleDashboard />
             </Suspense>
           </ErrorBoundary>
         );
@@ -466,7 +466,7 @@ export const Dashboard: React.FC = () => {
       }}>
         <Tabs value={currentTab} onChange={handleTabChange}>
           <Tab label="Overview" />
-          <Tab label="Real-Time Monitoring" icon={<VisibilityIcon />} iconPosition="start" />
+          <Tab label="Schedule Sessions" icon={<VisibilityIcon />} iconPosition="start" />
         </Tabs>
       </Box>
 

@@ -15,6 +15,7 @@ import {
 
 // Context and Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { CalendarProvider } from './contexts/CalendarContext';
 import { LoginForm } from './components/auth/LoginForm';
 import { CompanyRegistration } from './components/auth/CompanyRegistration';
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -26,7 +27,7 @@ import EmployeeCreation from './components/employees/EmployeeCreation';
 import EmployeeEdit from './components/employees/EmployeeEdit';
 import ScheduleManagement from './components/schedule/ScheduleManagement';
 import ErrorBoundary from './components/ErrorBoundary';
-import { NotificationsProvider } from './contexts/NotificationsContext';
+import { NotificationProvider } from './contexts/NotificationsContext';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -153,7 +154,7 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <NotificationsProvider>
+        <NotificationProvider enableRealTime={true}>
           <ErrorBoundary>
             <Router>
               <Routes>
@@ -196,7 +197,14 @@ function App() {
                   <Route path="employees/edit/:id" element={<EmployeeEdit />} />
 
                   {/* Schedule Routes */}
-                  <Route path="schedule" element={<ScheduleManagement />} />
+                  <Route 
+                    path="schedule" 
+                    element={
+                      <CalendarProvider>
+                        <ScheduleManagement />
+                      </CalendarProvider>
+                    } 
+                  />
 
                   {/* Time Tracking */}
                   <Route path="time-tracking" element={
@@ -250,7 +258,7 @@ function App() {
               </Routes>
             </Router>
           </ErrorBoundary>
-        </NotificationsProvider>
+        </NotificationProvider>
       </AuthProvider>
     </ThemeProvider>
   );

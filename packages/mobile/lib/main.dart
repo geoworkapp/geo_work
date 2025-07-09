@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase/firebase_service.dart';
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/dashboard/dashboard_screen.dart';
+import 'screens/dashboard/automatic_dashboard_screen.dart';
 import 'utils/logger.dart';
 
 void main() async {
@@ -137,7 +137,7 @@ class AuthWrapper extends ConsumerWidget {
     
     // Show appropriate screen based on auth state
     if (authState.isAuthenticated) {
-      return const DashboardScreen();
+      return const AutomaticDashboardScreen();
     } else {
       return const LoginScreen();
     }

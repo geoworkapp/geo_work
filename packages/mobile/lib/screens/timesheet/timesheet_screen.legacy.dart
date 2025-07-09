@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../providers/time_tracking_provider.dart';
+import '../../providers/time_tracking_provider.legacy.dart';
 
 class TimesheetScreen extends ConsumerStatefulWidget {
   const TimesheetScreen({super.key});

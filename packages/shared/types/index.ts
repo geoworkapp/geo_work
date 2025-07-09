@@ -910,6 +910,9 @@ export interface AuditTrail {
 
 // Schedule Management Types
 export interface Schedule {
+  id: string;
+  endTime: any;
+  startTime: any;
   scheduleId: string;
   companyId: string;
   employeeId: string;

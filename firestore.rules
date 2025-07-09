@@ -96,6 +96,29 @@ service cloud.firestore {
         isSameCompany(resource.data.companyId);
     }
 
+    // Schedule Sessions Collection - Enhanced auto time tracking system
+    match /scheduleSessions/{sessionId} {
+      allow read: if isSignedIn() && (
+        resource.data.employeeId == request.auth.uid ||
+        (canManageEmployees() && isSameCompany(resource.data.companyId))
+      );
+      allow write: if isSignedIn() && (
+        (canManageEmployees() && isSameCompany(request.resource.data.companyId)) ||
+        (resource.data.employeeId == request.auth.uid && 
+         !('adminOverrides' in request.resource.data) &&
+         !('companySettings' in request.resource.data))
+      );
+      allow delete: if isSignedIn() && canManageEmployees() && 
+        isSameCompany(resource.data.companyId);
+    }
+
+    // Employee Notification Settings - Employee consent and preferences
+    match /employeeNotificationSettings/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read: if isSignedIn() && canManageEmployees() && 
+        isSameCompany(getUserData().companyId);
+    }
+
     // Helper function to get user's company (used in other rules)
     function getUserCompany(userId) {
       return get(/databases/$(database)/documents/users/$(userId)).data.companyId;
@@ -367,6 +390,115 @@ service cloud.firestore {
     match /auditTrails/{trailId} {
       allow read: if isCompanyAdmin(request.auth.uid, resource.data.companyId) || isSuperAdmin(request.auth.uid);
       allow write: if false; // Only system writes audit trails
+    }
+
+    // TEMPLATE SYSTEM COLLECTIONS - Schedule template management
+
+    // Schedule Templates Collection - Template library and management
+    match /scheduleTemplates/{templateId} {
+      allow read: if isAuthenticated() && (
+        resource.data.isPublic == true ||
+        (resource.data.companyId != null && isSameCompany(resource.data.companyId)) ||
+        resource.data.createdBy == request.auth.uid
+      );
+      allow create: if isAuthenticated() && hasCompanyId() && 
+        request.resource.data.createdBy == request.auth.uid &&
+        isSameCompany(request.resource.data.companyId);
+      allow update: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        (canManageEmployees() && isSameCompany(resource.data.companyId))
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        (canManageEmployees() && isSameCompany(resource.data.companyId))
+      );
+    }
+
+    // Template Analytics Collection - Usage statistics and metrics
+    match /templateAnalytics/{analyticsId} {
+      allow read: if isAuthenticated() && (
+        // Public template analytics are readable by all
+        exists(/databases/$(database)/documents/scheduleTemplates/$(resource.data.templateId)) &&
+        get(/databases/$(database)/documents/scheduleTemplates/$(resource.data.templateId)).data.isPublic == true ||
+        // Company template analytics readable by company members
+        (resource.data.companyId != null && isSameCompany(resource.data.companyId))
+      );
+      allow write: if false; // Only system/Cloud Functions can write analytics
+    }
+
+    // Template Categories Collection - Predefined template categories
+    match /templateCategories/{categoryId} {
+      allow read: if isAuthenticated(); // All authenticated users can read categories
+      allow write: if isSuperAdmin(request.auth.uid); // Only super admins can manage categories
+    }
+
+    // Template Ratings Collection - User ratings and reviews
+    match /templateRatings/{ratingId} {
+      allow read: if isAuthenticated() && (
+        // Public template ratings are readable by all
+        exists(/databases/$(database)/documents/scheduleTemplates/$(resource.data.templateId)) &&
+        get(/databases/$(database)/documents/scheduleTemplates/$(resource.data.templateId)).data.isPublic == true ||
+        // Company template ratings readable by company members
+        (resource.data.companyId != null && isSameCompany(resource.data.companyId))
+      );
+      allow create: if isAuthenticated() && hasCompanyId() &&
+        request.resource.data.userId == request.auth.uid &&
+        // Can only rate templates they have access to
+        (exists(/databases/$(database)/documents/scheduleTemplates/$(request.resource.data.templateId)) &&
+         (get(/databases/$(database)/documents/scheduleTemplates/$(request.resource.data.templateId)).data.isPublic == true ||
+          isSameCompany(get(/databases/$(database)/documents/scheduleTemplates/$(request.resource.data.templateId)).data.companyId)));
+      allow update: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        (canManageEmployees() && isSameCompany(resource.data.companyId))
+      );
+    }
+
+    // Template Usage History Collection - Track template applications
+    match /templateUsageHistory/{usageId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        (canManageEmployees() && isSameCompany(resource.data.companyId))
+      );
+      allow create: if isAuthenticated() && hasCompanyId() &&
+        request.resource.data.userId == request.auth.uid &&
+        isSameCompany(request.resource.data.companyId);
+      allow update: if isAuthenticated() && canManageEmployees() && 
+        isSameCompany(resource.data.companyId);
+      allow delete: if isAuthenticated() && canManageEmployees() && 
+        isSameCompany(resource.data.companyId);
+    }
+
+    // Template Favorites Collection - User's favorite templates
+    match /templateFavorites/{favoriteId} {
+      allow read, write: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    // Template Comments Collection - Community feedback on templates
+    match /templateComments/{commentId} {
+      allow read: if isAuthenticated() && (
+        // Public template comments are readable by all
+        exists(/databases/$(database)/documents/scheduleTemplates/$(resource.data.templateId)) &&
+        get(/databases/$(database)/documents/scheduleTemplates/$(resource.data.templateId)).data.isPublic == true ||
+        // Company template comments readable by company members
+        (resource.data.companyId != null && isSameCompany(resource.data.companyId))
+      );
+      allow create: if isAuthenticated() && hasCompanyId() &&
+        request.resource.data.userId == request.auth.uid &&
+        // Can only comment on templates they have access to
+        (exists(/databases/$(database)/documents/scheduleTemplates/$(request.resource.data.templateId)) &&
+         (get(/databases/$(database)/documents/scheduleTemplates/$(request.resource.data.templateId)).data.isPublic == true ||
+          isSameCompany(get(/databases/$(database)/documents/scheduleTemplates/$(request.resource.data.templateId)).data.companyId)));
+      allow update: if isAuthenticated() && 
+        resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        (canManageEmployees() && isSameCompany(resource.data.companyId))
+      );
     }
   }
 }

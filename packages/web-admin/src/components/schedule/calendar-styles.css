@@ -147,6 +147,18 @@
   border: none;
   padding: 0;
   background: transparent;
+  cursor: grab;
+  transition: all 0.2s ease;
+}
+
+.rbc-event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.rbc-event:active {
+  cursor: grabbing;
+  transform: scale(0.98);
 }
 
 .rbc-event.rbc-selected {
@@ -160,6 +172,80 @@
 .rbc-event-content {
   font-size: 0.875rem;
   height: 100%;
+}
+
+/* Drag and Drop Styles */
+.rbc-addons-dnd .rbc-addons-dnd-row-body {
+  position: relative;
+}
+
+.rbc-addons-dnd .rbc-addons-dnd-drag-preview {
+  opacity: 0.5;
+  transform: rotate(5deg);
+  z-index: 1000;
+}
+
+.rbc-addons-dnd .rbc-event {
+  cursor: grab;
+}
+
+.rbc-addons-dnd .rbc-event:hover {
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.rbc-addons-dnd .rbc-event.rbc-addons-dnd-dragging {
+  cursor: grabbing;
+  opacity: 0.7;
+  transform: rotate(3deg) scale(1.02);
+  z-index: 1000;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.rbc-addons-dnd .rbc-event.rbc-addons-dnd-over {
+  background-color: #e3f2fd !important;
+  border: 2px dashed #1976d2 !important;
+}
+
+/* Drop zone indicators */
+.rbc-addons-dnd-row-body:hover {
+  background-color: rgba(25, 118, 210, 0.05);
+}
+
+.rbc-addons-dnd .rbc-day-bg.rbc-addons-dnd-droppable-hover {
+  background-color: rgba(25, 118, 210, 0.1) !important;
+  border: 2px dashed #1976d2;
+  border-radius: 4px;
+}
+
+/* Resize handles */
+.rbc-addons-dnd .rbc-event .rbc-addons-dnd-resize-ns-anchor {
+  background: #1976d2;
+  width: 100%;
+  height: 4px;
+  cursor: ns-resize;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.rbc-addons-dnd .rbc-event:hover .rbc-addons-dnd-resize-ns-anchor {
+  opacity: 1;
+}
+
+.rbc-addons-dnd .rbc-event .rbc-addons-dnd-resize-ns-anchor:hover {
+  background: #1565c0;
+  height: 6px;
+}
+
+/* Selection area */
+.rbc-slot-selection {
+  background-color: rgba(25, 118, 210, 0.15);
+  border: 2px solid #1976d2;
+  border-radius: 4px;
+}
+
+.rbc-slot-selecting {
+  cursor: crosshair;
 }
 
 /* Time Grid */
@@ -183,15 +269,6 @@
   height: 2px;
   background-color: #f44336;
   opacity: 0.7;
-}
-
-/* Selection highlight */
-.rbc-slot-selection {
-  background-color: rgba(25, 118, 210, 0.1);
-}
-
-.rbc-slot-selecting {
-  cursor: move;
 }
 
 /* Week and day view styling */
@@ -287,6 +364,34 @@
 
 .rbc-event.newly-created {
   animation: eventCreated 0.6s ease-out;
+}
+
+/* Drag feedback animations */
+@keyframes dragPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(25, 118, 210, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(25, 118, 210, 0);
+  }
+}
+
+.rbc-addons-dnd .rbc-event.rbc-addons-dnd-dragging {
+  animation: dragPulse 1s infinite;
+}
+
+/* Drop zone visual feedback */
+@keyframes dropZonePulse {
+  0%, 100% {
+    background-color: rgba(25, 118, 210, 0.1);
+  }
+  50% {
+    background-color: rgba(25, 118, 210, 0.2);
+  }
+}
+
+.rbc-addons-dnd .rbc-day-bg.rbc-addons-dnd-droppable-hover {
+  animation: dropZonePulse 1s infinite;
 }
 
 /* Loading state */

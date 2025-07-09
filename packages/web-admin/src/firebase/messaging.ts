@@ -46,11 +46,17 @@ export async function enablePushNotifications(opts: RegisterOptions) {
       : 'https://europe-west1-geowork-time-tracker.cloudfunctions.net/registerAdminToken';
 
     // Send token to backend for topic subscription
-    await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, companyId: opts.companyId }),
-    });
+    try {
+      await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, companyId: opts.companyId }),
+      });
+      console.log('✅ Push notification token registered successfully');
+    } catch (fetchError) {
+      console.warn('⚠️ Failed to register push token (emulator may be offline):', fetchError);
+      // Don't throw error - continue without push notifications
+    }
 
     // Foreground message listener; you can replace this with a global event or toast
     onMessage(msg, (payload) => {

@@ -386,7 +386,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // 👉 Register for FCM if admin & companyId present
           if (enrichedUser.role === 'company_admin' && enrichedUser.companyId) {
-            enablePushNotifications({ companyId: enrichedUser.companyId });
+            try {
+              await enablePushNotifications({ companyId: enrichedUser.companyId });
+            } catch (error) {
+              console.warn('Push notifications not available:', error);
+              // Continue without push notifications
+            }
           }
         }
       } else {

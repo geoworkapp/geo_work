@@ -4,9 +4,9 @@ import 'package:shared/models.dart' as shared;
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/jobsites_provider.dart';
-import '../../providers/time_tracking_provider.dart';
+import '../../providers/time_tracking_provider.legacy.dart';
 import '../../utils/logger.dart';
-import '../timesheet/timesheet_screen.dart';
+import '../timesheet/timesheet_screen.legacy.dart';
 import '../schedule/schedule_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {

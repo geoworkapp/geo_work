@@ -63,8 +63,17 @@ class Schedule {
       employeeName: data['employeeName'] ?? '',
       jobSiteId: data['jobSiteId'] ?? '',
       jobSiteName: data['jobSiteName'] ?? '',
-      startDateTime: (data['startDateTime'] as Timestamp).toDate(),
-      endDateTime: (data['endDateTime'] as Timestamp).toDate(),
+      // Handle both old (startDateTime) and new (startTime) field formats
+      startDateTime: data['startDateTime'] != null
+          ? (data['startDateTime'] as Timestamp).toDate()
+          : data['startTime'] != null
+              ? (data['startTime'] as Timestamp).toDate()
+              : DateTime.now(),
+      endDateTime: data['endDateTime'] != null
+          ? (data['endDateTime'] as Timestamp).toDate()
+          : data['endTime'] != null
+              ? (data['endTime'] as Timestamp).toDate()
+              : DateTime.now().add(const Duration(hours: 8)),
       shiftType: data['shiftType'] ?? 'regular',
       status: data['status'] ?? 'scheduled',
       notes: data['notes'],

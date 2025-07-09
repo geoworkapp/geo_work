@@ -99,7 +99,7 @@ const RealTimeMonitoring: React.FC = () => {
         const d = doc.data();
         const name = d.profile?.firstName || d.profile?.lastName
           ? `${d.profile?.firstName ?? ''} ${d.profile?.lastName ?? ''}`.trim()
-          : d.displayName || d.email || doc.id;
+                            : d.profile?.firstName || d.email || doc.id;
         map[doc.id] = name;
       });
       setUserMap(map);
