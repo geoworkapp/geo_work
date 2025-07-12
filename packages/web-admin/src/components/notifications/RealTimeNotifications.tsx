@@ -18,7 +18,7 @@ import {
   alpha,
   Card,
   CardContent,
-  Stack,
+
 } from '@mui/material';
 import {
   Notifications as NotificationsIcon,
@@ -31,7 +31,7 @@ import {
   CheckCircle as CheckCircleIcon,
   MarkEmailRead as MarkReadIcon,
   Settings as SettingsIcon,
-  FiberManualRecord as DotIcon,
+
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'react-toastify';

@@ -284,3 +284,23 @@ export {
   processActiveScheduleSessions,
   processScheduleEnds
 } from './scheduleOrchestrator';
+
+// -----------------------------------------------------------------------------
+// DEV-ONLY: Helper endpoint to trigger the schedule orchestrator manually
+// This is useful in the local emulator where v2 Scheduler triggers are not
+// executed automatically. Remove or comment out before deploying to production.
+// -----------------------------------------------------------------------------
+import { scheduleOrchestrator as _scheduleOrchestrator, processScheduleStarts, processActiveScheduleSessions, processScheduleEnds } from './scheduleOrchestrator';
+
+export const runOrchestratorNow = onRequest(async (_req, res) => {
+  try {
+    // Call helper phases directly (emulator does not expose handler)
+    await processScheduleStarts();
+    await processActiveScheduleSessions();
+    await processScheduleEnds();
+    res.status(200).json({ status: 'orchestrator-completed' });
+  } catch (err) {
+    console.error('runOrchestratorNow error:', err);
+    res.status(500).json({ error: 'orchestrator-failed', details: (err as Error).message });
+  }
+});

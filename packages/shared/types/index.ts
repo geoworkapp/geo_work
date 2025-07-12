@@ -199,7 +199,7 @@ export interface CompanySettings {
   requiredBreakInterval?: number; // hours before break required
   unpaidBreaks: boolean;
   // Geofencing Rules
-  geofenceAccuracy: number; // meters
+  geofenceAccuracy?: number; // meters (deprecated – radius defined per job site)
   minimumTimeAtSite: number; // minutes
   allowClockInEarly: boolean;
   allowClockOutEarly: boolean;

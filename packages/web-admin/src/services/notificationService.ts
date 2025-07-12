@@ -201,7 +201,7 @@ class NotificationService {
         ...metadata
       },
       createdAt: scheduleFor || new Date(),
-      scheduledFor: scheduleFor || null
+      scheduledFor: scheduleFor || undefined
     };
 
     try {

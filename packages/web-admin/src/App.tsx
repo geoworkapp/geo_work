@@ -27,6 +27,7 @@ import EmployeeCreation from './components/employees/EmployeeCreation';
 import EmployeeEdit from './components/employees/EmployeeEdit';
 import ScheduleManagement from './components/schedule/ScheduleManagement';
 import ErrorBoundary from './components/ErrorBoundary';
+import CompanySettingsForm from './components/settings/CompanySettingsForm';
 import { NotificationProvider } from './contexts/NotificationsContext';
 
 // Create Material-UI theme
@@ -223,12 +224,7 @@ function App() {
                   } />
 
                   {/* Settings */}
-                  <Route path="settings" element={
-                    <Box>
-                      <h1>Settings Page</h1>
-                      <p>Settings and configuration will be implemented in Phase 2</p>
-                    </Box>
-                  } />
+                  <Route path="settings" element={<CompanySettingsForm />} />
 
                   {/* Super Admin Routes */}
                   <Route path="platform/analytics" element={

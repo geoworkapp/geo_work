@@ -49,33 +49,33 @@ export async function getJobSite(jobSiteId: string): Promise<any | null> {
 /**
  * Get company settings by ID
  */
-export async function getCompanySettings(companyId: string): Promise<CompanyPolicySettings | null> {
+export async function getCompanySettings(companyId: string): Promise<CompanyPolicySettings> {
   try {
     const settingsDoc = await db.collection('companySettings').doc(companyId).get();
     
+    const defaults = {
+      minimumTimeAtSite: 5,
+      allowClockInEarly: false,
+      allowClockOutEarly: false,
+      clockInBuffer: 15,
+      clockOutBuffer: 30,
+      overtimeThreshold: 8.0,
+      requiredBreakDuration: 30,
+      requiredBreakInterval: 4,
+      geofenceExitGracePeriod: 5,
+    } as const;
+
     if (settingsDoc.exists) {
       const settings = settingsDoc.data();
-      
-      // Return with defaults for missing values
-      if (settings) {
-        return {
-          geofenceAccuracy: settings.geofenceAccuracy || 50,
-          minimumTimeAtSite: settings.minimumTimeAtSite || 5,
-          allowClockInEarly: settings.allowClockInEarly || false,
-          allowClockOutEarly: settings.allowClockOutEarly || false,
-          clockInBuffer: settings.clockInBuffer || 15,
-          clockOutBuffer: settings.clockOutBuffer || 30,
-          overtimeThreshold: settings.overtimeThreshold || 8.0,
-          requiredBreakDuration: settings.requiredBreakDuration || 30,
-          requiredBreakInterval: settings.requiredBreakInterval || 4,
-          geofenceExitGracePeriod: settings.geofenceExitGracePeriod || 5
-        };
-      }
+      return { ...defaults, ...(settings || {}) };
     }
-    
-    // Return defaults if no settings found
+
+    // No settings doc – log once and return defaults
+    logger.warn(`companySettings/${companyId} missing – using defaults`);
+    return defaults;
+  } catch (error) {
+    logger.error(`Error fetching company settings ${companyId}:`, error);
     return {
-      geofenceAccuracy: 50,
       minimumTimeAtSite: 5,
       allowClockInEarly: false,
       allowClockOutEarly: false,
@@ -86,9 +86,6 @@ export async function getCompanySettings(companyId: string): Promise<CompanyPoli
       requiredBreakInterval: 4,
       geofenceExitGracePeriod: 5
     };
-  } catch (error) {
-    logger.error(`Error fetching company settings ${companyId}:`, error);
-    return null;
   }
 }
 
@@ -488,15 +485,23 @@ export function createSessionEvent(
   location?: {latitude: number, longitude: number, accuracy: number},
   metadata?: any
 ): ScheduleSessionEvent {
-  return {
+  const event: any = {
     id: generateId(),
     timestamp,
     eventType,
-    location,
     triggeredBy,
-    details,
-    metadata
+    details
   };
+
+  if (location !== undefined) {
+    event.location = location;
+  }
+
+  if (metadata !== undefined) {
+    event.metadata = metadata;
+  }
+
+  return event as ScheduleSessionEvent;
 }
 
 // ============================================================================

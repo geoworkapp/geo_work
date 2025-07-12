@@ -59,7 +59,7 @@ export interface EmployeeNotificationSettings {
 }
 
 export interface CompanyPolicySettings {
-  geofenceAccuracy: number; // meters
+  geofenceAccuracy?: number; // meters (deprecated – per-jobSite radius now used)
   minimumTimeAtSite: number; // minutes before auto clock-in
   allowClockInEarly: boolean; // clock-in before scheduled time
   allowClockOutEarly: boolean; // clock-out before scheduled end

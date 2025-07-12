@@ -132,6 +132,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const companyRef = await addDoc(collection(db, 'companies'), company);
+
+    // 🔧 Create default companySettings doc so backend orchestrator has required data
+    const defaultSettings = {
+      minimumTimeAtSite: 5,
+      allowClockInEarly: false,
+      allowClockOutEarly: false,
+      clockInBuffer: 15,
+      clockOutBuffer: 30,
+      overtimeThreshold: 8.0,
+      requiredBreakDuration: 30,
+      requiredBreakInterval: 4,
+      geofenceExitGracePeriod: 5,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    } as const;
+
+    await setDoc(doc(db, 'companySettings', companyRef.id), defaultSettings);
+
     return companyRef.id;
   };
 
